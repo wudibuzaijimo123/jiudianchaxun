@@ -4,7 +4,24 @@ import { HotelItem, LlmConfig, SearchCenter, SearchHistoryItem } from '../types/
 const KEY_AMAP = 'jdcx_amap_web_service_key_v1';
 const KEY_SERP = 'jdcx_serpapi_hotels_key_v1';
 const KEY_LLM = 'jdcx_llm_config_v1';
+const KEY_SERVER_URL = 'jdcx_custom_server_url_v1';
 const KEY_FAVORITES = 'jdcx_favorite_hotels_v1';
+
+export function loadServerBaseUrl(): string {
+  try {
+    return localStorage.getItem(KEY_SERVER_URL) || '';
+  } catch {
+    return '';
+  }
+}
+
+export function saveServerBaseUrl(url: string): void {
+  try {
+    localStorage.setItem(KEY_SERVER_URL, url.trim().replace(/\/+$/, ''));
+  } catch {
+    // ignore
+  }
+}
 const KEY_HISTORY = 'jdcx_search_history_v1';
 const KEY_LAST_CENTER = 'jdcx_last_center_v1';
 

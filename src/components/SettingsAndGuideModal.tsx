@@ -20,9 +20,15 @@ interface Props {
   amapKey: string;
   serpApiKey: string;
   llmConfig: LlmConfig;
+  serverBaseUrl?: string;
   currentMode: DataSourceMode;
   center: SearchCenter;
-  onSaveAll: (amapKey: string, serpApiKey: string, llmConfig: LlmConfig) => void;
+  onSaveAll: (
+    amapKey: string,
+    serpApiKey: string,
+    llmConfig: LlmConfig,
+    serverBaseUrl: string
+  ) => void;
   onClose: () => void;
 }
 
@@ -58,6 +64,7 @@ export const SettingsAndGuideModal: React.FC<Props> = ({
   amapKey,
   serpApiKey,
   llmConfig,
+  serverBaseUrl = '',
   center,
   onSaveAll,
   onClose,
@@ -67,6 +74,7 @@ export const SettingsAndGuideModal: React.FC<Props> = ({
   const [llmKey, setLlmKey] = useState(llmConfig.apiKey);
   const [llmBase, setLlmBase] = useState(llmConfig.baseUrl);
   const [llmModel, setLlmModel] = useState(llmConfig.model);
+  const [inputServerUrl, setInputServerUrl] = useState(serverBaseUrl);
 
   // 默认遮罩保护密钥防截图泄露，可点眼睛图标查看
   const [showAmap, setShowAmap] = useState(false);
@@ -91,7 +99,8 @@ export const SettingsAndGuideModal: React.FC<Props> = ({
     setLlmKey(llmConfig.apiKey);
     setLlmBase(llmConfig.baseUrl || 'https://api.deepseek.com/v1');
     setLlmModel(llmConfig.model || 'deepseek-chat');
-  }, [amapKey, serpApiKey, llmConfig, open]);
+    setInputServerUrl(serverBaseUrl);
+  }, [amapKey, serpApiKey, llmConfig, serverBaseUrl, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -153,11 +162,16 @@ export const SettingsAndGuideModal: React.FC<Props> = ({
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    onSaveAll(inputAmap.trim(), inputSerp.trim(), {
-      apiKey: llmKey.trim(),
-      baseUrl: llmBase.trim() || 'https://api.deepseek.com/v1',
-      model: llmModel.trim() || 'deepseek-chat',
-    });
+    onSaveAll(
+      inputAmap.trim(),
+      inputSerp.trim(),
+      {
+        apiKey: llmKey.trim(),
+        baseUrl: llmBase.trim() || 'https://api.deepseek.com/v1',
+        model: llmModel.trim() || 'deepseek-chat',
+      },
+      inputServerUrl.trim()
+    );
     onClose();
   };
 
@@ -436,6 +450,21 @@ export const SettingsAndGuideModal: React.FC<Props> = ({
                   </ul>
                 </div>
               )}
+            </div>
+
+            {/* ========== 4. 独立 IPA 包选填：挂载自己的云服务器后端地址 ========== */}
+            <div className="key-field-block" style={{ marginTop: 12 }}>
+              <label htmlFor="server-url-input">
+                🌐 4. 选填：远程云服务器地址（仅独立安装 iOS IPA 且需连接自家服务器时填写）
+              </label>
+              <input
+                id="server-url-input"
+                type="text"
+                value={inputServerUrl}
+                onChange={(e) => setInputServerUrl(e.target.value)}
+                placeholder="网页直连留空即可；IPA 包可填如 https://你的服务器域名 或留空纯端侧运行"
+                spellCheck={false}
+              />
             </div>
 
             <button type="submit" className="save-both-btn">

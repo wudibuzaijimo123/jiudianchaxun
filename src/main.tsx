@@ -2,12 +2,13 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 
-// 注册 PWA Service Worker
-if ('serviceWorker' in navigator) {
+// 仅在 HTTP/HTTPS 网页模式下注册 PWA Service Worker（独立 iOS IPA 容器内跳过）
+if (
+  'serviceWorker' in navigator &&
+  (window.location.protocol === 'https:' || window.location.protocol === 'http:')
+) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {
-      // 开发环境下忽略 SW 注册告警
-    });
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
   });
 }
 

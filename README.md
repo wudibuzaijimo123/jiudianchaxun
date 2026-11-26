@@ -93,6 +93,33 @@ npm run dev
 
 ---
 
+## 📱 手机端独立使用方案（云服务器部署 & iOS 原生 IPA 签名安装）
+
+### 方案 A：iPhone 原生 `.ipa` 安装包（已配置 GitHub Actions 云端自动打包！）
+仓库内置了 `.github/workflows/build-ios-ipa.yml`（基于 macOS Xcode + Capacitor 自动打包）：
+1. 每次推送到 `main` 分支后，GitHub 会自动在云端编译生成未签名的 **`jiudianchaxun-unsigned.ipa`**（已内置中文应用名「附近住哪儿」、iOS 原生 GPS 定位权限及美团/抖音/高德 App 唤醒白名单）。
+2. 直接在手机或电脑打开仓库的 **[Releases 页面](https://github.com/wudibuzaijimo123/jiudianchaxun/releases)**（或 Actions 构建产物），下载 `jiudianchaxun-unsigned.ipa`。
+3. 使用你的 **IPA 证书签名工具（轻松签 / 全能签 / 巨魔 TrollStore / 牛蛙助手 / Sideloadly）** 对该 `.ipa` 签名并安装到 iPhone。
+4. 安装后打开 App，在右上角填好高德 Key 和大模型 Key 即可**纯端侧独立运行**（也可在第 4 栏填入你自己的云服务器地址开启完整代理检索）。
+
+### 方案 B：部署到你自己的云服务器（24 小时在线，支持 iPhone 添加到主屏幕 / 给 IPA 供数）
+项目已内置零外部依赖的生产服务端 `server.mjs` 与 `Dockerfile` / `docker-compose.yml`：
+
+```bash
+# 方式 1：Docker Compose 一键后台部署（推荐）
+git clone git@github.com:wudibuzaijimo123/jiudianchaxun.git
+cd jiudianchaxun
+docker compose up -d --build
+
+# 方式 2：Node.js 直接启动生产服务
+npm install
+npm run build
+PORT=5173 npm start
+```
+部署完成后（建议配合 Nginx / Caddy 反代开启 `HTTPS`，以便手机浏览器使用室外 GPS 定位），手机浏览器直接访问你的服务器域名即可随时使用！
+
+---
+
 ## 📦 构建生产静态包
 
 ```bash

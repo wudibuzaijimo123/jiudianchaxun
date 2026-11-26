@@ -26,6 +26,12 @@ import {
 import { FALLBACK_HOTEL_PHOTOS } from '../data/demoHotels';
 import { fetchHotelLiveRoomsDetail } from '../services/amapService';
 import {
+  directClientDetailAiRooms,
+  isNativePackagedApp,
+  resolveApiUrl,
+} from '../services/standaloneClient';
+import { loadServerBaseUrl } from '../utils/storage';
+import {
   AiDetailRoomData,
   CnHotelIntelData,
   HotelItem,
@@ -107,8 +113,10 @@ export const HotelDetailSheet: React.FC<Props> = ({
 
     const loadAllIntel = async () => {
       let fetchedSnippets: any[] = [];
+      const serverBase = loadServerBaseUrl();
+      const canCallBackend = !isNativePackagedApp() || Boolean(serverBase);
 
-      if (serpApiKey.trim()) {
+      if (serpApiKey.trim() && canCallBackend) {
         setLoadingRooms(true);
         setLoadingCnIntel(true);
 
@@ -128,11 +136,14 @@ export const HotelDetailSheet: React.FC<Props> = ({
 
         try {
           const r = await fetch(
-            `/api/cn-hotel-intel?api_key=${encodeURIComponent(
-              serpApiKey.trim()
-            )}&hotel=${encodeURIComponent(hotel.name)}&city=${encodeURIComponent(
-              hotel.city || ''
-            )}`
+            resolveApiUrl(
+              `/api/cn-hotel-intel?api_key=${encodeURIComponent(
+                serpApiKey.trim()
+              )}&hotel=${encodeURIComponent(hotel.name)}&city=${encodeURIComponent(
+                hotel.city || ''
+              )}`,
+              serverBase
+            )
           );
           const data = await r.json();
           if (!cancelled) {
@@ -150,23 +161,40 @@ export const HotelDetailSheet: React.FC<Props> = ({
       if (llmConfig.apiKey.trim() && !cancelled) {
         setLoadingAiRooms(true);
         try {
-          const aiResp = await fetch('/api/ai-hotel-rooms', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              llm: llmConfig,
-              serpApiKey: serpApiKey.trim(),
-              hotelName: hotel.name,
-              city: hotel.city || '',
-              address: hotel.address,
-              categoryLabel: hotel.categoryLabel,
+          let aiJson: any = null;
+          if (canCallBackend) {
+            const aiResp = await fetch(resolveApiUrl('/api/ai-hotel-rooms', serverBase), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                llm: llmConfig,
+                serpApiKey: serpApiKey.trim(),
+                hotelName: hotel.name,
+                city: hotel.city || '',
+                address: hotel.address,
+                categoryLabel: hotel.categoryLabel,
+                checkIn,
+                checkOut,
+                existingSnippets: fetchedSnippets,
+                fallbackPrice: hotel.minPrice,
+              }),
+            });
+            if (aiResp.ok) {
+              aiJson = await aiResp.json();
+            }
+          }
+          if (!aiJson || !Array.isArray(aiJson.rooms)) {
+            aiJson = await directClientDetailAiRooms(
+              llmConfig,
+              hotel.name,
+              hotel.city || '',
+              hotel.address,
+              hotel.categoryLabel,
               checkIn,
               checkOut,
-              existingSnippets: fetchedSnippets,
-              fallbackPrice: hotel.minPrice,
-            }),
-          });
-          const aiJson = await aiResp.json();
+              hotel.minPrice
+            );
+          }
           if (!cancelled && aiJson && Array.isArray(aiJson.rooms)) {
             setAiRoomData(aiJson);
           }

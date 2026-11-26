@@ -1,0 +1,96 @@
+name: Build Unsigned iOS IPA
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-ipa:
+    name: Build Unsigned IPA on macOS Xcode
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install web dependencies & build frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Add Capacitor iOS project
+        run: |
+          npm install --no-save @capacitor/core@^6.2.0 @capacitor/cli@^6.2.0 @capacitor/ios@^6.2.0
+          npx cap add ios
+          npx cap copy ios
+
+      - name: Configure iOS Info.plist (GPS, Chinese App Name, Meituan/Douyin URL Schemes)
+        run: |
+          PLIST="ios/App/App/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName 附近住哪儿" "$PLIST" || /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string 附近住哪儿" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :NSLocationWhenInUseUsageDescription string 用于查询您当前位置周边的酒店与宾馆住宿信息" "$PLIST" || true
+          /usr/libexec/PlistBuddy -c "Add :NSLocationAlwaysAndWhenInUseUsageDescription string 用于查询您当前位置周边的酒店与宾馆住宿信息" "$PLIST" || true
+          /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity dict" "$PLIST" || true
+          /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoads bool true" "$PLIST" || true
+          /usr/libexec/PlistBuddy -c "Add :LSApplicationQueriesSchemes array" "$PLIST" || true
+          for scheme in imeituan snssdk1128 iosamap baidumap ctrip; do
+            /usr/libexec/PlistBuddy -c "Add :LSApplicationQueriesSchemes: string $scheme" "$PLIST" || true
+          done
+
+      - name: Compile Unsigned iOS App via Xcode
+        run: |
+          if [ -d "ios/App/App.xcworkspace" ]; then
+            cd ios/App && pod install --repo-update || true
+            cd ../..
+            XCODE_TARGET="-workspace ios/App/App.xcworkspace"
+          else
+            XCODE_TARGET="-project ios/App/App.xcodeproj"
+          fi
+
+          xcodebuild \
+            $XCODE_TARGET \
+            -scheme App \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath ios/build \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES \
+            clean build
+
+      - name: Package Payload into Unsigned .ipa
+        run: |
+          mkdir -p Payload
+          cp -R ios/build/Build/Products/Release-iphoneos/App.app Payload/
+          zip -qr jiudianchaxun-unsigned.ipa Payload
+          ls -lh jiudianchaxun-unsigned.ipa
+
+      - name: Upload IPA to GitHub Actions Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: jiudianchaxun-unsigned-ipa
+          path: jiudianchaxun-unsigned.ipa
+          retention-days: 30
+
+      - name: Publish Unsigned IPA to GitHub Releases (latest-ipa)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest-ipa
+          name: "附近住哪儿 iOS 未签名安装包 (自动更新)"
+          body: |
+            自动编译的 iOS 未签名 `.ipa` 安装包（已配置中文名「附近住哪儿」、iOS 原生 GPS 定位权限及美团/抖音/高德 App 唤起白名单）。
+            下载下方的 `jiudianchaxun-unsigned.ipa`，使用你的 **IPA 证书签名工具（轻松签 / 全能签 / 巨魔 TrollStore / 牛蛙助手 / Sideloadly）** 签名后即可直接安装到 iPhone 使用！
+          files: jiudianchaxun-unsigned.ipa
+          prerelease: false

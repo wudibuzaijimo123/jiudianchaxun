@@ -1,0 +1,10 @@
+{
+  "appId": "com.jiudianchaxun.radar",
+  "appName": "附近住哪儿",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "ios": {
+    "contentInset": "never",
+    "allowsLinkPreview": false
+  }
+}

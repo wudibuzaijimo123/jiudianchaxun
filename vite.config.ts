@@ -758,6 +758,7 @@ ${snippetContext || '暂无直接网页正文，请结合该门店品牌/地段�
 }
 
 export default defineConfig({
+  base: './',
   plugins: [react(), backendProxyPlugin()],
   server: {
     host: '0.0.0.0',

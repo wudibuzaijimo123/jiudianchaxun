@@ -19,6 +19,8 @@ import {
   gcj02ToWgs84,
   wgs84ToGcj02,
 } from '../utils/coordTransform';
+import { loadServerBaseUrl } from '../utils/storage';
+import { isNativePackagedApp, resolveApiUrl } from './standaloneClient';
 
 function asStr(val: unknown): string {
   if (typeof val === 'string') return val.trim();
@@ -32,6 +34,44 @@ function normalizeHotelName(name: string): string {
     .replace(/(酒店|宾馆|大酒店|国际酒店|旅馆|民宿|公寓|店|济南|山东)/g, '')
     .replace(/\s+/g, '')
     .toLowerCase();
+}
+
+/**
+ * 过滤高德住宿类目中混入的快递驿站（兔喜驿站/菜鸟驿站等）、学校/单位内部宿舍、养老院、宠物店等非对外营业住宿
+ */
+function isRealBookableHotel(name: string, rawType: string): boolean {
+  const text = `${name} ${rawType}`;
+
+  // 1. 排除各类快递驿站（因含“驿站”二字常被地图误归入旅馆驿站）
+  if (
+    /兔喜|菜鸟驿站|妈妈驿站|熊猫快收|近邻宝|驿收发|丰巢|快递|速递|物流|代收点|邮政支局|顺丰|中通|圆通|申通|韵达|极兔/.test(
+      text
+    )
+  ) {
+    return false;
+  }
+
+  // 2. 排除单位内部宿舍、家属院、驻地办非营业楼
+  if (/宿舍|家属院|家属楼|职工楼|教工楼|人才公寓|公租房|保租房|廉租房|安置房/.test(text)) {
+    return false;
+  }
+
+  // 3. 排除大中小学内部的学生公寓楼（如“XX学校6号公寓”、“XX学院学生公寓”），保留正常商业“酒店公寓”
+  if (
+    /(大学|学院|学校|中学|小学|一中|二中|实验校).*?(学生公寓|男女生公寓|\d+号公寓|[一二三四五六七八九十]+号公寓|公寓楼)/.test(
+      name
+    ) &&
+    !/酒店|宾馆|美宿|民宿|日租/.test(name)
+  ) {
+    return false;
+  }
+
+  // 4. 排除养老、月子、宠物寄养等非普通住店场所
+  if (/养老院|敬老院|护理院|康养中心|月子中心|月子会所|宠物酒店|宠物寄养|猫咪寄养/.test(text)) {
+    return false;
+  }
+
+  return true;
 }
 
 function classifyHotel(
@@ -394,6 +434,9 @@ async function fetchLiveHotelInventory(
   serpApiKey: string
 ): Promise<{ items: HotelItem[]; error?: string }> {
   if (!serpApiKey.trim()) return { items: [] };
+  const serverBase = loadServerBaseUrl();
+  // 若运行在独立 IPA 内且未填远程后端服务器地址，跳过本地代理接口，直接由高德+端侧AI工作
+  if (isNativePackagedApp() && !serverBase) return { items: [] };
 
   try {
     const [wgsLng, wgsLat] = gcj02ToWgs84(center.lng, center.lat);
@@ -401,11 +444,14 @@ async function fetchLiveHotelInventory(
     const strippedName = center.name.replace(/[（(].*?[)）]/g, '').trim();
 
     const querySerp = async (qStr: string) => {
-      const url = `/api/serp-hotels?api_key=${encodeURIComponent(
-        serpApiKey.trim()
-      )}&q=${encodeURIComponent(qStr)}&check_in_date=${encodeURIComponent(
-        checkIn
-      )}&check_out_date=${encodeURIComponent(checkOut)}`;
+      const url = resolveApiUrl(
+        `/api/serp-hotels?api_key=${encodeURIComponent(
+          serpApiKey.trim()
+        )}&q=${encodeURIComponent(qStr)}&check_in_date=${encodeURIComponent(
+          checkIn
+        )}&check_out_date=${encodeURIComponent(checkOut)}`,
+        serverBase
+      );
       const resp = await fetch(url);
       return resp.json();
     };
@@ -472,6 +518,7 @@ async function fetchLiveHotelInventory(
       }
 
       const name = asStr(prop.name) || `可订酒店 ${idx + 1}`;
+      if (!isRealBookableHotel(name, asStr(prop.type))) continue;
       const cls = classifyHotel(name, asStr(prop.type), asStr(prop.hotel_class));
       const lowestNightly =
         prop.rate_per_night?.extracted_lowest ??
@@ -573,15 +620,20 @@ export async function fetchHotelLiveRoomsDetail(
   serpApiKey: string
 ): Promise<LiveOtaOffer[]> {
   if (!serpApiKey.trim()) return [];
+  const serverBase = loadServerBaseUrl();
+  if (isNativePackagedApp() && !serverBase) return [];
   try {
     if (propertyToken) {
-      const url = `/api/serp-hotels?api_key=${encodeURIComponent(
-        serpApiKey.trim()
-      )}&property_token=${encodeURIComponent(
-        propertyToken
-      )}&check_in_date=${encodeURIComponent(checkIn)}&check_out_date=${encodeURIComponent(
-        checkOut
-      )}`;
+      const url = resolveApiUrl(
+        `/api/serp-hotels?api_key=${encodeURIComponent(
+          serpApiKey.trim()
+        )}&property_token=${encodeURIComponent(
+          propertyToken
+        )}&check_in_date=${encodeURIComponent(checkIn)}&check_out_date=${encodeURIComponent(
+          checkOut
+        )}`,
+        serverBase
+      );
       const resp = await fetch(url);
       const data = await resp.json();
       if (!data.error) {
@@ -593,11 +645,14 @@ export async function fetchHotelLiveRoomsDetail(
     // 若列表阶段没有挂载到 propertyToken，按「城市 + 酒店名」实时定向检索该门店
     const cleanCity = (city || '').replace(/市$/, '');
     const q = cleanCity ? `${cleanCity} ${hotelName}` : hotelName;
-    const searchUrl = `/api/serp-hotels?api_key=${encodeURIComponent(
-      serpApiKey.trim()
-    )}&q=${encodeURIComponent(q)}&check_in_date=${encodeURIComponent(
-      checkIn
-    )}&check_out_date=${encodeURIComponent(checkOut)}`;
+    const searchUrl = resolveApiUrl(
+      `/api/serp-hotels?api_key=${encodeURIComponent(
+        serpApiKey.trim()
+      )}&q=${encodeURIComponent(q)}&check_in_date=${encodeURIComponent(
+        checkIn
+      )}&check_out_date=${encodeURIComponent(checkOut)}`,
+      serverBase
+    );
     const sResp = await fetch(searchUrl);
     const sData = await sResp.json();
     if (sData.error) return [];
@@ -694,7 +749,12 @@ async function fetchAmapNearbyPois(
       }
 
       const hotels: HotelItem[] = allPois
-        .filter((poi: any) => typeof poi.location === 'string' && poi.location.includes(','))
+        .filter(
+          (poi: any) =>
+            typeof poi.location === 'string' &&
+            poi.location.includes(',') &&
+            isRealBookableHotel(asStr(poi.name), asStr(poi.type))
+        )
         .map((poi: any, idx: number) => {
           const [lngStr, latStr] = poi.location.split(',');
           const lng = Number(lngStr);

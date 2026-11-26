@@ -26,6 +26,11 @@ import {
   searchNearbyHotels,
 } from './services/amapService';
 import {
+  directClientBatchAiPrices,
+  isNativePackagedApp,
+  resolveApiUrl,
+} from './services/standaloneClient';
+import {
   DataSourceMode,
   FilterState,
   HotelItem,
@@ -49,11 +54,13 @@ import {
   loadLlmConfig,
   loadSearchHistory,
   loadSerpApiKey,
+  loadServerBaseUrl,
   saveAmapKey,
   saveFavorites,
   saveLastCenter,
   saveLlmConfig,
   saveSerpApiKey,
+  saveServerBaseUrl,
 } from './utils/storage';
 import './App.css';
 
@@ -78,6 +85,7 @@ export const App: React.FC = () => {
   const [amapKey, setAmapKey] = useState<string>(() => loadAmapKey());
   const [serpApiKey, setSerpApiKey] = useState<string>(() => loadSerpApiKey());
   const [llmConfig, setLlmConfig] = useState<LlmConfig>(() => loadLlmConfig());
+  const [serverBaseUrl, setServerBaseUrl] = useState<string>(() => loadServerBaseUrl());
   const [center, setCenter] = useState<SearchCenter>(() => loadLastCenter());
   const [checkIn, setCheckIn] = useState<string>(defaultIn);
   const [checkOut, setCheckOut] = useState<string>(defaultOut);
@@ -219,34 +227,71 @@ export const App: React.FC = () => {
         await Promise.all(
           chunks.map(async (chunk) => {
             try {
-              const resp = await fetch('/api/ai-batch-prices', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  llm: currentLlm,
-                  serpApiKey: sKey,
-                  city: targetCenter.city,
-                  centerName: targetCenter.name,
-                  checkIn: inDate,
-                  checkOut: outDate,
-                  hotels: chunk.map((m) => ({
+              const serverBase = loadServerBaseUrl();
+              let resultsArr: any[] = [];
+
+              // 若在独立 iOS IPA 内且未连接外部后端，直接在手机端侧调用大模型接口；否则走后端代理搜全网实证
+              if (isNativePackagedApp() && !serverBase) {
+                resultsArr = await directClientBatchAiPrices(
+                  currentLlm,
+                  targetCenter.city,
+                  targetCenter.name,
+                  inDate,
+                  outDate,
+                  chunk.map((m) => ({
                     id: m.id,
                     name: m.name,
                     address: m.address,
                     categoryLabel: m.categoryLabel,
-                    distance: m.distance,
                   })),
-                  knownPrices,
-                }),
-              });
-              const data = await resp.json();
-              if (!resp.ok || data?.error) {
-                if (!firstError && data?.error) firstError = String(data.error);
-                return;
+                  knownPrices
+                );
+              } else {
+                const resp = await fetch(resolveApiUrl('/api/ai-batch-prices', serverBase), {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    llm: currentLlm,
+                    serpApiKey: sKey,
+                    city: targetCenter.city,
+                    centerName: targetCenter.name,
+                    checkIn: inDate,
+                    checkOut: outDate,
+                    hotels: chunk.map((m) => ({
+                      id: m.id,
+                      name: m.name,
+                      address: m.address,
+                      categoryLabel: m.categoryLabel,
+                      distance: m.distance,
+                    })),
+                    knownPrices,
+                  }),
+                });
+                const data = await resp.json();
+                if (!resp.ok || data?.error) {
+                  // 后端不可达时自动降级到纯端侧直连大模型
+                  resultsArr = await directClientBatchAiPrices(
+                    currentLlm,
+                    targetCenter.city,
+                    targetCenter.name,
+                    inDate,
+                    outDate,
+                    chunk.map((m) => ({
+                      id: m.id,
+                      name: m.name,
+                      address: m.address,
+                      categoryLabel: m.categoryLabel,
+                    })),
+                    knownPrices
+                  );
+                } else if (Array.isArray(data?.results)) {
+                  resultsArr = data.results;
+                }
               }
-              if (Array.isArray(data?.results) && data.results.length > 0) {
+
+              if (resultsArr.length > 0) {
                 const priceMap = new Map<string, any>();
-                data.results.forEach((r: any) => {
+                resultsArr.forEach((r: any) => {
                   if (r && r.id && Number.isFinite(Number(r.minPrice)) && Number(r.minPrice) > 0) {
                     priceMap.set(String(r.id), r);
                   }
@@ -902,16 +947,19 @@ export const App: React.FC = () => {
         amapKey={amapKey}
         serpApiKey={serpApiKey}
         llmConfig={llmConfig}
+        serverBaseUrl={serverBaseUrl}
         currentMode={dataMode}
         center={center}
-        onSaveAll={(nextAmap, nextSerp, nextLlm) => {
+        onSaveAll={(nextAmap, nextSerp, nextLlm, nextServerUrl) => {
           saveAmapKey(nextAmap);
           saveSerpApiKey(nextSerp);
           saveLlmConfig(nextLlm);
+          saveServerBaseUrl(nextServerUrl);
           setAmapKey(nextAmap);
           setSerpApiKey(nextSerp);
           setLlmConfig(nextLlm);
-          showToast('配置已保存，正在同步周边房态与国内情报...');
+          setServerBaseUrl(nextServerUrl);
+          showToast('配置已保存，正在同步周边房态与情报...');
         }}
         onClose={() => setSettingsOpen(false)}
       />
