@@ -25,7 +25,7 @@ import { LlmConfig, PlaceSuggestion, SearchCenter } from '../types/hotel';
 import { JobFilterState, JobListing, JobSortMode } from '../types/job';
 import { amapTargetFrom, buildAmapWebUrl, openInAmap } from '../utils/mapLaunch';
 import { copyTextSilently, isMobileDevice } from '../utils/deepLinks';
-import { openExternalUrl, reserveTab } from '../utils/nativeBridge';
+import { openAppFirst, openExternalUrl, reserveTab } from '../utils/nativeBridge';
 import { JobCard } from './JobCard';
 import { JobDetailSheet } from './JobDetailSheet';
 import { SmartJumpModal, SmartJumpTarget } from './SmartJumpModal';
@@ -227,12 +227,25 @@ export const JobPanel: React.FC<Props> = ({
       }
 
       // BOSS直聘、智联或手机端：原生 IPA 内立即触发跳转，不让剪贴板异步阻塞手势
+      const appSchemes: Record<string, string[]> = {
+        boss: [links.bossApp, links.bossAppAlt],
+        wuba: [links.wubaApp],
+        zhaopin: [links.zhaopinApp],
+        amap: [],
+      };
+      const platformName =
+        platform === 'boss' ? 'BOSS直聘' : platform === 'wuba' ? '58同城' : '智联招聘';
       const tab = reserveTab();
       const copyPromise = copyTextSilently(keyword);
-      const opened = await openExternalUrl(links[platform], tab);
+      // 先试 App 自己的 scheme（真机上能直接进 App），没装才退浏览器
+      const result = await openAppFirst(appSchemes[platform] || [], links[platform], tab);
       const copied = await Promise.race([copyPromise, new Promise<boolean>((r) => setTimeout(() => r(false), 120))]);
-      if (!opened) {
+      if (result === 'fail') {
         onToast(`跳转受阻，已复制「${keyword}」，可前往招聘平台粘贴搜`);
+        return;
+      }
+      if (result === 'app') {
+        onToast(`已跳转到${platformName} App${copied ? `，搜索词「${keyword}」已复制` : ''}`);
         return;
       }
       onToast(

@@ -102,6 +102,41 @@ export async function openExternalUrl(url: string, reserved?: Window | null): Pr
   return true;
 }
 
+/** 唤起结果：进了 App / 退了网页 / 都失败 */
+export type OpenResult = 'app' | 'web' | 'fail';
+
+/**
+ * 优先用平台自己的 URL Scheme 拉起原生 App，没装再退回网页。
+ *
+ * 只给 https 链接的话，iOS 只会用 Safari 打开网页版——这就是「点了 58 同城 / BOSS直聘
+ * 没跳进 App」的原因。真正的 App 唤起必须走 wbmain:// 、bosszp:// 这类自定义 scheme。
+ *
+ * 注意：iOS 的 canOpenUrl 只有在 Info.plist 的 LSApplicationQueriesSchemes 里
+ * 登记过该 scheme 时才返回 true（仓库的工作流已经写好这份白名单）。
+ */
+export async function openAppFirst(
+  schemes: string[],
+  webFallback: string,
+  reserved?: Window | null
+): Promise<OpenResult> {
+  if (isNativePackagedApp()) {
+    for (const raw of schemes) {
+      const scheme = normalizeExternalUrl(raw);
+      if (!scheme) continue;
+      try {
+        const can = await AppLauncher.canOpenUrl({ url: scheme });
+        if (!can?.value) continue;
+        const res = await AppLauncher.openUrl({ url: scheme });
+        if (res?.completed !== false) return 'app';
+      } catch {
+        // 这个 scheme 不可用，试下一个
+      }
+    }
+  }
+  const opened = await openExternalUrl(webFallback, reserved);
+  return opened ? 'web' : 'fail';
+}
+
 /** 唤起美团/抖音这类「有则打开 App，没有就退化为网页」的场景 */
 export async function openAppOrWeb(appUrl: string, webUrl: string): Promise<'app' | 'web'> {
   const opened = await openExternalUrl(appUrl);

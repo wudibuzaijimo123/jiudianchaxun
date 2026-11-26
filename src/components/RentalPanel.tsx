@@ -27,7 +27,7 @@ import { LlmConfig, PlaceSuggestion, SearchCenter } from '../types/hotel';
 import { RentalFilterState, RentalListing, RentalSortMode } from '../types/rental';
 import { amapTargetFrom, buildAmapWebUrl, openInAmap } from '../utils/mapLaunch';
 import { copyTextSilently, isMobileDevice } from '../utils/deepLinks';
-import { openExternalUrl, reserveTab } from '../utils/nativeBridge';
+import { openAppFirst, openExternalUrl, reserveTab } from '../utils/nativeBridge';
 import { RentalCard } from './RentalCard';
 import { RentalDetailSheet } from './RentalDetailSheet';
 import { RentalMapView } from './RentalMapView';
@@ -246,13 +246,27 @@ export const RentalPanel: React.FC<Props> = ({
       // 原生 IPA 内不要在跳转前 await 剪贴板，防止丢失 iOS 手势激活导致拦截；直接异步复制并立即调原生跳转
       const targetUrl =
         platform === 'beike' && isMobileDevice() ? links.beikeMobile : links[platform];
+      const appSchemes: Record<string, string[]> = {
+        anjuke: [links.anjukeApp],
+        wuba: [links.wubaApp],
+        beike: [links.beikeApp],
+        amap: [],
+        baidu: [],
+      };
+      const platformName =
+        platform === 'anjuke' ? '安居客' : platform === 'wuba' ? '58同城' : '贝壳找房';
       const tab = reserveTab();
       const copyPromise = copyTextSilently(keyword);
-      const opened = await openExternalUrl(targetUrl, tab);
+      // 先试 App 自己的 scheme（真机上能直接进 App），没装才退浏览器
+      const result = await openAppFirst(appSchemes[platform] || [], targetUrl, tab);
       const copied = await Promise.race([copyPromise, new Promise<boolean>((r) => setTimeout(() => r(false), 120))]);
 
-      if (!opened) {
+      if (result === 'fail') {
         onToast(`跳转受阻，已尝试复制「${keyword}」，请到浏览器打开`);
+        return;
+      }
+      if (result === 'app') {
+        onToast(`已跳转到${platformName} App${copied ? `，搜索词「${keyword}」已复制` : ''}`);
         return;
       }
 

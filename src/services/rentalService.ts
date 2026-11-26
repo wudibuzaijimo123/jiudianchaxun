@@ -760,6 +760,10 @@ export function buildRentalPlatformLinks(center: SearchCenter, listing?: RentalL
   const defaultAnjuke = buildAnjukeMobileUrl(center.city, listing);
 
   return {
+    // App 自身的 URL Scheme：优先拉起已安装的原生 App，没装再退回下面的网页链接
+    anjukeApp: 'openanjuke://',
+    wubaApp: `wbmain://`,
+    beikeApp: 'lianjiabeike://',
     anjuke: listing?.sourceUrl && /anjuke\.com/i.test(listing.sourceUrl) ? listing.sourceUrl : defaultAnjuke,
     anjukeArea: slug
       ? `https://${slug}.zu.anjuke.com/fangyuan/?kw=${encodedDist}`

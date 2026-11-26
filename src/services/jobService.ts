@@ -692,6 +692,12 @@ export function buildJobPlatformLinks(center: SearchCenter, job?: JobListing | n
   const encodedFull = encodeURIComponent(fullKw);
 
   return {
+    // App 自身的 URL Scheme：优先拉起原生 App，没装再退回网页
+    // bosszp:// 是 BOSS直聘（旧版兼容 zhipin://）；wbmain:// 是 58 同城统一跳转协议；zhaopin:// 是智联招聘
+    bossApp: 'bosszp://',
+    bossAppAlt: 'zhipin://',
+    wubaApp: job ? 'wbmain://jump/job/list' : 'wbmain://',
+    zhaopinApp: 'zhaopin://',
     boss:
       job?.sourceUrl && /zhipin\.com/i.test(job.sourceUrl)
         ? job.sourceUrl

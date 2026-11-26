@@ -107,7 +107,7 @@ jobs:
           # 允许唤起美团、抖音、高德、百度、携程、安居客、58、贝壳、BOSS直聘等原生 App
           /usr/libexec/PlistBuddy -c "Delete :LSApplicationQueriesSchemes" "$PLIST" 2>/dev/null || true
           /usr/libexec/PlistBuddy -c "Add :LSApplicationQueriesSchemes array" "$PLIST"
-          for scheme in imeituan snssdk1128 iosamap baidumap ctrip diditaxi openanjuke wbmain lianjiabeike bosszp weixin alipay; do
+          for scheme in imeituan snssdk1128 iosamap baidumap ctrip diditaxi openanjuke wbmain lianjiabeike bosszp zhipin zhaopin job51 weixin alipay; do
             /usr/libexec/PlistBuddy -c "Add :LSApplicationQueriesSchemes: string $scheme" "$PLIST"
           done
 
