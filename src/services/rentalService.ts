@@ -297,7 +297,13 @@ export async function fetchNearbyRealCommunities(
     for (const poi of data.pois) {
       const name = String(poi.name || '').trim();
       if (!name || seen.has(name)) continue;
-      if (/门$|入口|停车场|垃圾|物业|售楼|公厕/.test(name)) continue;
+      if (
+        /门$|入口|停车场|垃圾|物业|售楼|公厕|宿舍|教工楼|职工楼|学生公寓|教学楼|实验楼/.test(
+          name
+        )
+      ) {
+        continue;
+      }
       const [lngStr, latStr] = String(poi.location || '').split(',');
       const lng = Number(lngStr);
       const lat = Number(latStr);
