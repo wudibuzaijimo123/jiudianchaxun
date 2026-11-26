@@ -9,10 +9,21 @@ import {
 import { extractJsonFromText, isNativePackagedApp, resolveApiUrl } from './standaloneClient';
 import { fetchAmapPoiMedia } from './rentalService';
 import { calcDistanceMeters } from '../utils/coordTransform';
-import { bossCityCode } from '../utils/citySlug';
+import { anjukeCitySlug, bossCityCode } from '../utils/citySlug';
 
-const CACHE_KEY = 'jdcx_job_cache_v1';
+const CACHE_KEY = 'jdcx_job_cache_v2';
 const CACHE_TTL = 30 * 60 * 1000;
+
+export interface GroundedEmployerPoi {
+  name: string;
+  category: string;
+  district: string;
+  address: string;
+  distanceMeters: number;
+  lng: number;
+  lat: number;
+  photos: string[];
+}
 
 const JOB_TYPES: JobType[] = ['全职', '兼职', '实习', '日结', '钟点工'];
 
@@ -174,6 +185,61 @@ export async function enrichJobMedia(
   return out;
 }
 
+/** 使用高德周边搜索拉取搜索点周边真实餐饮/商超/酒店/物流/企业实体单位（防 AI 幻觉编造虚假店铺） */
+export async function fetchNearbyRealEmployers(
+  center: SearchCenter,
+  radius: number,
+  amapKey: string
+): Promise<GroundedEmployerPoi[]> {
+  const key = amapKey.trim();
+  if (!key) return [];
+  try {
+    const rMeters = Math.min(Math.max(radius, 1000), 10000);
+    const url =
+      `https://restapi.amap.com/v5/place/around?key=${encodeURIComponent(key)}` +
+      `&location=${center.lng},${center.lat}&types=050000|060000|100000|170000&radius=${rMeters}` +
+      '&page_size=24&page_num=1&sortrule=distance&show_fields=photos';
+    const resp = await fetch(url);
+    const data = await resp.json();
+    if (data?.status !== '1' || !Array.isArray(data.pois)) return [];
+
+    const seen = new Set<string>();
+    const list: GroundedEmployerPoi[] = [];
+    for (const poi of data.pois) {
+      const name = String(poi.name || '').trim();
+      if (!name || seen.has(name)) continue;
+      if (/公厕|洗手间|停车场|ATM|丰巢|菜鸟驿站/.test(name)) continue;
+      const [lngStr, latStr] = String(poi.location || '').split(',');
+      const lng = Number(lngStr);
+      const lat = Number(latStr);
+      if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
+
+      seen.add(name);
+      const dist = Number(poi.distance) > 0
+        ? Math.round(Number(poi.distance))
+        : calcDistanceMeters(center.lng, center.lat, lng, lat);
+      const rawType = String(poi.type || '');
+      const category = rawType.split(';')[0] || '本地商户';
+      const district = String(poi.adname || '').trim();
+      const rawAddr = String(poi.address || '').trim();
+      const address = rawAddr
+        ? district && !rawAddr.startsWith(district)
+          ? `${district}${rawAddr}`
+          : rawAddr
+        : `${district}${name}`;
+      const photos = (Array.isArray(poi.photos) ? poi.photos : [])
+        .map((p: any) => String(p?.url || '').replace(/^http:\/\//i, 'https://'))
+        .filter((u: string) => /^https:\/\//i.test(u))
+        .slice(0, 4);
+
+      list.push({ name, category, district, address, distanceMeters: dist, lng, lat, photos });
+    }
+    return list;
+  } catch {
+    return [];
+  }
+}
+
 /** 半径越大给的条数越多，避免「换成 5km 还是同一批岗位」 */
 export function jobCountForRadius(radius: number): number {
   if (radius <= 1000) return 8;
@@ -186,21 +252,35 @@ export function jobCountForRadius(radius: number): number {
 export function buildJobPrompt(
   center: SearchCenter,
   radius: number,
-  count = jobCountForRadius(3000)
+  count = jobCountForRadius(3000),
+  realEmployers: GroundedEmployerPoi[] = []
 ): string {
   const cleanCity = String(center.city || '').replace(/市$/, '');
   const rangeText = radius >= 1000 ? `${Math.round(radius / 1000)}km` : `${radius}m`;
   const nearM = Math.max(150, Math.round(radius * 0.08));
   const midM = Math.max(nearM + 200, Math.round(radius * 0.4));
-  return `你是中国本地招聘信息检索引擎。请检索「${cleanCity} ${center.name}」周边 ${rangeText} 内的真实在招岗位（参照 BOSS 直聘/58同城/智联招聘上该地段门店与小微信企业的招聘特征），输出约 ${count} 条。
+  const empBlock =
+    realEmployers.length > 0
+      ? `【高德地图实测周边真实商户/酒店/商超/企业名单（必须严格基于下列真实存在单位生成与业态匹配的岗位，原样使用 company、district、address 和 distanceMeters，严禁编造虚构店名厂名！）】：\n${realEmployers
+          .slice(0, 20)
+          .map(
+            (e, i) =>
+              `${i + 1}. 单位名="${e.name}" | 业态="${e.category}" | 区县="${e.district}" | 真实地址="${e.address}" | 距中心=${e.distanceMeters}m`
+          )
+          .join('\n')}\n\n`
+      : '';
 
-要求：
-1. 以餐饮、酒店、超市、快递物流、家政、门店导购、工厂普工、外卖骑手等小城市常见岗位为主，不要编造大厂高薪岗位；
-2. 薪资必须符合该城市该地段真实行情，写清单位（元/月、元/天、元/时）；
-3. 类型覆盖全职、兼职、日结、钟点工、实习；
-4. 单位名称必须互不相同，不要几条岗位只是换个名字但同一家店；
-5. 距离铺满整个 ${rangeText}：约 1/3 在 ${nearM}-${midM}m，约 1/3 在 ${midM}m-${Math.round(radius * 0.8)}m，其余接近 ${rangeText} 上限，不要都挤在 300-500m；
-6. 不要编造 HR 手机号、微信号，不要输出联系方式字段。
+  return `你是中国本地招聘信息检索引擎。请检索「${cleanCity} ${center.name}」周边 ${rangeText} 内真实常见在招岗位（参照 BOSS直聘/58同城/智联招聘上该地段门店与企业特征），输出约 ${count} 条。
+
+${empBlock}要求：
+1. 岗位必须与单位真实业态对应（餐饮店招服务员/后厨/收银、便利店商超招理货员/导购、酒店招前台/客房保洁、物流招分拣/骑手、企业工厂招普工/文员），不要编造大厂高薪岗位；
+2. 薪资符合当地真实行情并注明单位（元/月、元/天、元/时）；类型覆盖全职、兼职、日结、钟点工、实习；
+3. 单位名称互不相同，不要同一家店重复出；${
+    realEmployers.length > 0
+      ? 'company、district、address、distanceMeters 必须严格与上方实测单位一致；'
+      : `距离铺满 ${rangeText}（约 1/3 在 ${nearM}-${midM}m，约 1/3 在 ${midM}m-${Math.round(radius * 0.8)}m）；`
+  }
+4. 不要编造 HR 手机号、微信号，不要输出联系方式字段。
 
 严格只返回 JSON 数组，不要任何解释文字，每项字段如下：
 [
@@ -228,7 +308,8 @@ export function buildJobPrompt(
 export async function callDirectClientJobs(
   llm: LlmConfig,
   center: SearchCenter,
-  radius: number
+  radius: number,
+  realEmployers: GroundedEmployerPoi[] = []
 ): Promise<any[]> {
   const cleanBase = (llm.baseUrl || 'https://api.deepseek.com/v1').replace(/\/+$/, '');
   const endpoint = cleanBase.endsWith('/chat/completions')
@@ -245,10 +326,13 @@ export async function callDirectClientJobs(
       model: llm.model || 'deepseek-chat',
       messages: [
         { role: 'system', content: '只输出合法的纯 JSON 数组，禁止任何多余解释。' },
-        { role: 'user', content: buildJobPrompt(center, radius, jobCountForRadius(radius)) },
+        {
+          role: 'user',
+          content: buildJobPrompt(center, radius, jobCountForRadius(radius), realEmployers),
+        },
       ],
-      temperature: 0.85,
-      max_tokens: 3200,
+      temperature: realEmployers.length > 0 ? 0.5 : 0.8,
+      max_tokens: 3400,
     }),
   });
   const data = await resp.json();
@@ -451,7 +535,7 @@ export interface JobQueryOptions {
 /** 联网检索周边招聘：优先后端代理，独立 IPA 未配服务器时端侧直连大模型 */
 export async function searchJobs(options: JobQueryOptions): Promise<JobSearchResult> {
   const { center, radius, llm, amapKey = '', serverBaseUrl = '', serpApiKey = '', force } = options;
-  const cacheKey = `${center.city}|${center.name}|${radius}`;
+  const cacheKey = `${center.city}|${center.name}|${radius}|${amapKey ? 'amap' : 'no'}`;
 
   if (!force) {
     const cached = readCache(cacheKey);
@@ -472,17 +556,43 @@ export async function searchJobs(options: JobQueryOptions): Promise<JobSearchRes
     );
   }
 
+  // 拉取高德周边真实存在商户/企业/门店，锚定招聘单位真实性
+  const realEmployers = await fetchNearbyRealEmployers(center, radius, amapKey);
+  const empMap = new Map(realEmployers.map((e) => [e.name, e]));
+
   const finish = async (rawList: any[], notice = ''): Promise<JobSearchResult> => {
     const normalized = rawList
       .map((raw, idx) => normalizeJob(raw, idx))
       .filter((j): j is JobListing => Boolean(j))
+      .map((j) => {
+        const matched =
+          empMap.get(j.company) ||
+          realEmployers.find((e) => e.name.includes(j.company) || j.company.includes(e.name));
+        if (!matched) return j;
+        return {
+          ...j,
+          company: matched.name,
+          district: matched.district || j.district,
+          address: matched.address || j.address,
+          distanceMeters: matched.distanceMeters,
+          lng: matched.lng,
+          lat: matched.lat,
+          geoApprox: false,
+          photos: matched.photos.length > 0 ? matched.photos : j.photos,
+        };
+      })
       .sort((a, b) => a.distanceMeters - b.distanceMeters);
     if (normalized.length === 0) {
       return demoResult(center, 'AI 本次没有返回可用岗位，先展示示例数据，可稍后点「重新检索」。', amapKey);
     }
     const jobs = await enrichJobMedia(normalized, center, radius, amapKey);
     writeCache(cacheKey, jobs);
-    return { jobs, mode: 'ai', notice };
+    const mergedNotice =
+      notice ||
+      (realEmployers.length > 0
+        ? `已锚定周边 ${realEmployers.length} 家高德真实商户/单位定位与实景图`
+        : '');
+    return { jobs, mode: 'ai', notice: mergedNotice };
   };
 
   let firstError = '';
@@ -499,6 +609,13 @@ export async function searchJobs(options: JobQueryOptions): Promise<JobSearchRes
           centerName: center.name,
           radius,
           count: jobCountForRadius(radius),
+          realEmployers: realEmployers.map((e) => ({
+            name: e.name,
+            category: e.category,
+            district: e.district,
+            address: e.address,
+            distanceMeters: e.distanceMeters,
+          })),
         }),
       });
       const data = await resp.json();
@@ -512,37 +629,60 @@ export async function searchJobs(options: JobQueryOptions): Promise<JobSearchRes
   }
 
   try {
-    const direct = await callDirectClientJobs(llm, center, radius);
+    const direct = await callDirectClientJobs(llm, center, radius, realEmployers);
     return finish(direct, '');
   } catch (err: any) {
     const msg = err?.message || firstError || '网络异常';
-    return demoResult(center, `招聘检索失败（${msg}），当前为示例数据。`);
+    return demoResult(center, `招聘检索失败（${msg}），当前为示例数据。`, amapKey);
   }
 }
 
 /**
- * BOSS直聘网页搜索页。
- * 带上城市编码，否则平台按 IP / 上次城市出结果，很容易跳到外地岗位。
+ * 构建精准区域限定检索词：如在济南市章丘区搜「工厂普工」，自动带上「章丘 工厂普工」避免满城乱跳到莱芜/其他远郊区。
+ */
+export function buildJobSearchKeyword(
+  center: SearchCenter,
+  job?: JobListing | null
+): string {
+  const cleanCity = String(center.city || '').replace(/市$/, '');
+  const districtShort = String(job?.district || '')
+    .replace(/(区|县)$/, '')
+    .trim();
+  const titleClean = job
+    ? job.title.replace(/[（(].*?[)）]/g, '').trim() || job.title
+    : `${center.name} 招聘`;
+
+  if (districtShort && districtShort !== cleanCity && !titleClean.includes(districtShort)) {
+    return `${districtShort} ${titleClean}`.trim();
+  }
+  return titleClean;
+}
+
+/**
+ * BOSS直聘网页搜索页（实测 `/web/geek/jobs?city=...&query=...` 返回 200 直通）。
  */
 export function buildBossSearchUrl(city: string, keyword: string): string {
   const code = bossCityCode(city);
   return (
-    `https://www.zhipin.com/web/geek/job?query=${encodeURIComponent(keyword)}` +
+    `https://www.zhipin.com/web/geek/jobs?query=${encodeURIComponent(keyword)}` +
     (code ? `&city=${code}` : '')
   );
 }
 
-/** 招聘平台跳转（平台不支持深链参数时退化为站内搜索，不编造岗位详情页） */
+/** 招聘平台跳转（同时提供精准区域关键词与手机/电脑各自直通链接） */
 export function buildJobPlatformLinks(center: SearchCenter, job?: JobListing | null) {
   const cleanCity = String(center.city || '').replace(/市$/, '');
-  const kw = job ? `${cleanCity} ${job.title}`.trim() : `${cleanCity} ${center.name} 招聘`;
-  const encoded = encodeURIComponent(kw);
+  const slug = anjukeCitySlug(center.city);
+  const bossKw = buildJobSearchKeyword(center, job);
+  const fullKw = job ? `${cleanCity} ${bossKw}`.trim() : `${cleanCity} ${center.name} 招聘`;
+  const encodedBoss = encodeURIComponent(bossKw);
+  const encodedFull = encodeURIComponent(fullKw);
 
   return {
-    // 岗位标题就是最准的检索词，城市用 city 参数限定，避免搜出外地岗位
-    boss: buildBossSearchUrl(center.city, job ? job.title : kw),
-    wuba: `https://m.58.com/job/?key=${encoded}`,
-    zhaopin: `https://sou.zhaopin.com/?kw=${encoded}`,
+    boss: buildBossSearchUrl(center.city, bossKw),
+    wuba: `https://m.58.com/${slug ? `${slug}/` : ''}job/?key=${encodedBoss}`,
+    wubaPc: `https://${slug ? `${slug}.` : 'www.'}58.com/job/?key=${encodedBoss}`,
+    zhaopin: `https://www.zhaopin.com/sou/?kw=${encodedFull}`,
   };
 }
 

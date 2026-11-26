@@ -56,7 +56,14 @@ export function extractJsonFromText(rawText: string): any {
         if (depth === 0 && startIdx >= 0) {
           try {
             const obj = JSON.parse(cleaned.slice(startIdx, i + 1));
-            if (obj && obj.id) recovered.push(obj);
+            if (
+              obj &&
+              typeof obj === 'object' &&
+              !Array.isArray(obj) &&
+              (obj.id || obj.title || obj.company || obj.community || obj.name || obj.roomName)
+            ) {
+              recovered.push(obj);
+            }
           } catch {
             // ignore
           }
@@ -74,6 +81,12 @@ export function extractJsonFromText(rawText: string): any {
  */
 export function isNativePackagedApp(): boolean {
   if (typeof window === 'undefined') return false;
+  const cap = (
+    window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }
+  ).Capacitor;
+  if (typeof cap?.isNativePlatform === 'function' && cap.isNativePlatform()) {
+    return true;
+  }
   const proto = window.location.protocol;
   return proto === 'capacitor:' || proto === 'ionic:' || proto === 'file:';
 }

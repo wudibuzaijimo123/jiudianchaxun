@@ -1,6 +1,6 @@
-# 附近住哪儿 (Nearby Stay Radar)
+# 查询工具（酒店 · 租房 · 招聘周边查询）
 
-一款响应式手机端 Web App / PWA 周边酒店住宿查询与 AI 全网搜价工具。输入任意目标地点、高校校区、地铁站或使用当前定位，即可快速扫描周边酒店、本地宾馆与民宿的位置距离、电话、实时空房状态，并通过 **AI 联网搜价** 将起步房价、价格区间与主力房型价目表直接打印在列表卡片和交互式地图气泡上。
+一款响应式手机端 Web App / PWA 与 iOS 独立安装包工具（应用名：**查询工具**）。输入任意目标地点、高校校区、地铁站或使用当前定位，即可一键切换查询**周边酒店房价与空房、安居客/58/贝壳租房房源、周边在招岗位**，支持纯手机端侧独立运行或云服务器部署。
 
 ---
 
@@ -98,10 +98,10 @@ npm run dev
 
 ### 方案 A：iPhone 原生 `.ipa` 安装包（已配置 GitHub Actions 云端自动打包！）
 仓库内置了 `.github/workflows/build-ios-ipa.yml`（基于 macOS Xcode + Capacitor 自动打包）：
-1. 每次推送到 `main` 分支后，GitHub 会自动在云端编译生成未签名的 **`jiudianchaxun-unsigned.ipa`**（已内置中文应用名「附近住哪儿」、iOS 原生 GPS 定位权限及美团/抖音/高德 App 唤醒白名单）。
-2. 直接在手机或电脑打开仓库的 **[Releases 页面](https://github.com/wudibuzaijimo123/jiudianchaxun/releases)**（或 Actions 构建产物），下载 `jiudianchaxun-unsigned.ipa`。
+1. 每次推送到 `main` 分支后，GitHub 会自动在云端编译生成最新的未签名 **`chaxun-tool-unsigned.ipa`**（已内置中文桌面应用名「查询工具」、`resources/icon.png` 全尺寸高清桌面图标、iOS 原生 GPS 定位权限及美团/抖音/高德/安居客/58/贝壳/BOSS直聘 App 唤醒白名单）。
+2. 直接在手机或电脑打开仓库的 **[Releases 页面](https://github.com/wudibuzaijimo123/jiudianchaxun/releases)**，下载最新的 `chaxun-tool-unsigned.ipa`。
 3. 使用你的 **IPA 证书签名工具（轻松签 / 全能签 / 巨魔 TrollStore / 牛蛙助手 / Sideloadly）** 对该 `.ipa` 签名并安装到 iPhone。
-4. 安装后打开 App，在右上角填好高德 Key 和大模型 Key 即可**纯端侧独立运行**（也可在第 4 栏填入你自己的云服务器地址开启完整代理检索）。
+4. 安装后打开 App，无需额外部署服务器，在右上角填好高德 Web服务 Key 和大模型 Key 即可**纯手机端侧独立运行**（也可在第 4 栏选填你自己的云服务器地址开启完整代理检索）。
 
 ### 方案 B：部署到你自己的云服务器（24 小时在线，支持 iPhone 添加到主屏幕 / 给 IPA 供数）
 项目已内置零外部依赖的生产服务端 `server.mjs` 与 `Dockerfile` / `docker-compose.yml`：

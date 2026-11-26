@@ -536,7 +536,13 @@ export const App: React.FC = () => {
     <div className="app-shell">
       <header className="top-navbar">
         <div className="brand-area">
-          <div className="brand-logo">查</div>
+          <img
+            src="./apple-touch-icon.png"
+            alt="查询工具"
+            width={34}
+            height={34}
+            className="brand-logo-img"
+          />
           <div>
             <h1>查询工具</h1>
             <p className="brand-sub">酒店 · 租房 · 招聘，周边一图查</p>
@@ -547,29 +553,31 @@ export const App: React.FC = () => {
           <button
             type="button"
             className={`source-status-pill mode-${
-              dataMode === 'amap_live' ? 'amap' : serpApiKey ? 'amap' : 'demo'
+              dataMode === 'amap_live' ? 'amap' : amapKey || serpApiKey ? 'amap' : 'demo'
             }`}
             onClick={() => setSettingsOpen(true)}
           >
             <Zap size={13} />
             <span>
-              {serpApiKey
-                ? '实时房态已开启'
+              {amapKey && llmConfig.apiKey
+                ? '双核已就绪'
                 : amapKey
-                ? '开启实时空房报价'
+                ? '高德已连接'
                 : '配置接口Key'}
             </span>
           </button>
 
-          <button
-            type="button"
-            className="install-app-btn"
-            onClick={() => setSettingsOpen(true)}
-            title="手机扫码同步使用"
-          >
-            <Smartphone size={14} />
-            <span className="hide-xs">手机扫码用</span>
-          </button>
+          {!isNativePackagedApp() && (
+            <button
+              type="button"
+              className="install-app-btn"
+              onClick={() => setSettingsOpen(true)}
+              title="手机扫码同步使用"
+            >
+              <Smartphone size={14} />
+              <span className="hide-xs">手机扫码用</span>
+            </button>
+          )}
         </div>
       </header>
 
@@ -1009,6 +1017,7 @@ export const App: React.FC = () => {
         isFavorite={detailHotel ? favoriteIds.has(detailHotel.id) : false}
         checkIn={checkIn}
         checkOut={checkOut}
+        amapKey={amapKey}
         serpApiKey={serpApiKey}
         llmConfig={llmConfig}
         onClose={() => setDetailHotel(null)}

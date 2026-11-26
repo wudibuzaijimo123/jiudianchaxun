@@ -14,6 +14,7 @@ import {
   X,
 } from 'lucide-react';
 import { DataSourceMode, LlmConfig, SearchCenter } from '../types/hotel';
+import { isNativePackagedApp } from '../services/standaloneClient';
 
 interface Props {
   open: boolean;
@@ -103,7 +104,7 @@ export const SettingsAndGuideModal: React.FC<Props> = ({
   }, [amapKey, serpApiKey, llmConfig, serverBaseUrl, open]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || isNativePackagedApp()) return;
     fetch('/api/lan-info')
       .then((r) => r.json())
       .then((data) => {
@@ -122,7 +123,7 @@ export const SettingsAndGuideModal: React.FC<Props> = ({
   }, [open]);
 
   useEffect(() => {
-    if (!open || !selectedIp) {
+    if (!open || !selectedIp || isNativePackagedApp()) {
       setQrDataUrl('');
       return;
     }

@@ -25,12 +25,13 @@ import {
 } from '../services/rentalService';
 import { LlmConfig, PlaceSuggestion, SearchCenter } from '../types/hotel';
 import { RentalFilterState, RentalListing, RentalSortMode } from '../types/rental';
-import { amapTargetFrom, openInAmap } from '../utils/mapLaunch';
-import { copyTextSilently } from '../utils/deepLinks';
+import { amapTargetFrom, buildAmapWebUrl, openInAmap } from '../utils/mapLaunch';
+import { copyTextSilently, isMobileDevice } from '../utils/deepLinks';
 import { openExternalUrl, reserveTab } from '../utils/nativeBridge';
 import { RentalCard } from './RentalCard';
 import { RentalDetailSheet } from './RentalDetailSheet';
 import { RentalMapView } from './RentalMapView';
+import { SmartJumpModal, SmartJumpTarget } from './SmartJumpModal';
 import './rental.css';
 
 const RADIUS_OPTIONS = [
@@ -91,6 +92,7 @@ export const RentalPanel: React.FC<Props> = ({
   const [notice, setNotice] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(false);
   const [detail, setDetail] = useState<RentalListing | null>(null);
+  const [jumpModalTarget, setJumpModalTarget] = useState<SmartJumpTarget | null>(null);
   const [showFilters, setShowFilters] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<'list' | 'map'>(() =>
     new URLSearchParams(window.location.search).get('view') === 'map' ? 'map' : 'list'
@@ -142,14 +144,14 @@ export const RentalPanel: React.FC<Props> = ({
         setLoading(false);
       }
     },
-    [center, filters.radius, llmConfig, serpApiKey, serverBaseUrl, onToast]
+    [center, filters.radius, llmConfig, amapKey, serpApiKey, serverBaseUrl, onToast]
   );
 
   useEffect(() => {
     void runSearch(false);
-    // 仅在地点或接口配置变化时重新联网检索，切换筛选不重复消耗额度
+    // 地点、高德 Key 或大模型配置变化时重新检索并锚定真实周边小区
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [center.lng, center.lat, llmConfig.apiKey, llmConfig.baseUrl, llmConfig.model, serverBaseUrl]);
+  }, [center.lng, center.lat, amapKey, llmConfig.apiKey, llmConfig.baseUrl, llmConfig.model, serverBaseUrl]);
 
   // 地名联想
   useEffect(() => {
@@ -206,23 +208,56 @@ export const RentalPanel: React.FC<Props> = ({
         return;
       }
 
-      // 和酒店查询一致：先复制精准搜索词，再打开平台，用户进去直接粘贴
+      // 和酒店查询一致：先复制精准搜索词，再决定电脑直达还是弹手机扫码
       const keyword = buildRentalSearchKeyword(center, listing);
-      // 先在点击事件里占位，避免复制完成后再 window.open 被浏览器当弹窗拦掉
-      const tab = reserveTab();
-      const copied = await copyTextSilently(keyword);
-      if (platform === 'anjuke' || platform === 'wuba') {
-        onToast(
-          copied
-            ? `已复制「${keyword}」，进入平台粘贴搜索；若出现验证页，完成一次验证即可`
-            : `正在打开平台，进入后搜索「${keyword}」`
-        );
-      } else if (platform === 'beike') {
-        onToast(`正在打开贝壳找房「${keyword}」`);
+      const links = buildRentalPlatformLinks(center, listing);
+
+      // 58同城、贝壳电脑网页会触发滑动验证或强制登录，手机端 URL 实测 200 直通，因此在电脑端弹出手机扫码弹窗
+      if (!isMobileDevice() && (platform === 'wuba' || platform === 'beike')) {
+        await copyTextSilently(keyword);
+        setJumpModalTarget({
+          platformName: platform === 'wuba' ? '58同城租房' : '贝壳找房',
+          accentColor: platform === 'wuba' ? '#ff552e' : '#2563eb',
+          itemTitle: listing.title,
+          itemSub: `${center.city} · ${listing.address}`,
+          keyword,
+          mobileQrUrl: platform === 'wuba' ? links.wuba : links.beikeMobile,
+          altQrLabel: '高德定位小区',
+          altQrUrl: buildAmapWebUrl(
+            amapTargetFrom({
+              name: listing.community,
+              address: listing.address,
+              city: center.city,
+              lng: listing.lng,
+              lat: listing.lat,
+              geoApprox: listing.geoApprox,
+            })
+          ),
+          pcFallbackUrl: platform === 'wuba' ? links.wubaPc : links.beike,
+          reasonHint:
+            platform === 'wuba'
+              ? '58同城电脑端会自动拦截并弹出安全验证；手机扫码可 200 直通当地 58 租房频道，并自动带好搜索词！'
+              : '贝壳电脑端搜索页需先登录账号；手机扫码可直达同城租房频道，配合已复制小区名一贴即出！',
+        });
+        return;
       }
 
-      const links = buildRentalPlatformLinks(center, listing);
-      void openExternalUrl(links[platform], tab);
+      // 手机端或支持电脑直接打开的平台（安居客 <slug>.zu.anjuke.com/fangyuan/?kw= 已实测直通 200）
+      const tab = reserveTab();
+      const copied = await copyTextSilently(keyword);
+      if (platform === 'anjuke') {
+        onToast(
+          copied
+            ? `已跳转安居客（锁定${center.city.replace(/市$/, '')}·${listing.community}），词已复制`
+            : `正在打开安居客搜索「${listing.community}」`
+        );
+      } else if (platform === 'wuba') {
+        onToast(copied ? `已复制「${keyword}」，正在打开 58 同城` : `正在打开 58 同城`);
+      } else if (platform === 'beike') {
+        onToast(`正在打开贝壳找房（${center.city.replace(/市$/, '')}）`);
+      }
+
+      void openExternalUrl(platform === 'beike' && isMobileDevice() ? links.beikeMobile : links[platform], tab);
     },
     [center, onToast]
   );
@@ -522,6 +557,8 @@ export const RentalPanel: React.FC<Props> = ({
         onClose={() => setDetail(null)}
         onJump={(l, platform) => handleJump(l, platform)}
       />
+
+      <SmartJumpModal target={jumpModalTarget} onClose={() => setJumpModalTarget(null)} />
     </div>
   );
 };

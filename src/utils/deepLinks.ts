@@ -1,13 +1,17 @@
 import { HotelItem } from '../types/hotel';
+import { isNativePackagedApp } from '../services/standaloneClient';
 import { openAppOrWeb, openExternalUrl, reserveTab } from './nativeBridge';
 
 export function isMobileDevice(): boolean {
+  if (isNativePackagedApp()) return true;
   if (typeof navigator === 'undefined') return false;
+  if (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) return true;
   return /Android|iPhone|iPad|iPod|HarmonyOS|Mobile/i.test(navigator.userAgent);
 }
 
 export function isAppleDevice(): boolean {
   if (typeof navigator === 'undefined') return false;
+  if (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) return true;
   return /iPhone|iPad|iPod|Macintosh/i.test(navigator.userAgent);
 }
 

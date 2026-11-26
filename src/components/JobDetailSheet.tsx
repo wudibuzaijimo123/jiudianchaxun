@@ -18,8 +18,8 @@ import { JobListing } from '../types/job';
 import { copyTextSilently } from '../utils/deepLinks';
 import { formatDistance } from '../utils/coordTransform';
 import { buildAmapWebUrl } from '../utils/mapLaunch';
-import { buildAmapStaticMapUrl, isAmapPhoto, isStaticMapUrl, photoSrc } from '../utils/rentalImages';
-import { buildBossSearchUrl } from '../services/jobService';
+import { buildAmapStaticMapUrl, getPhotoSourceLabel, isStaticMapUrl, jobPhotos, photoSrc } from '../utils/rentalImages';
+import { buildJobPlatformLinks, buildJobSearchKeyword } from '../services/jobService';
 
 interface Props {
   job: JobListing | null;
@@ -31,7 +31,7 @@ interface Props {
 
 export const JobDetailSheet: React.FC<Props> = ({ job, city, amapKey, onClose, onJump }) => {
   const [activePhoto, setActivePhoto] = useState(0);
-  const [qrMode, setQrMode] = useState<'boss' | 'amap'>('boss');
+  const [qrMode, setQrMode] = useState<'boss' | 'wuba' | 'amap'>('boss');
   const [qrUrl, setQrUrl] = useState('');
   const [copied, setCopied] = useState(false);
 
@@ -40,18 +40,23 @@ export const JobDetailSheet: React.FC<Props> = ({ job, city, amapKey, onClose, o
   }, [job?.id]);
 
   const cleanCity = String(city || '').replace(/市$/, '');
-  // 岗位标题本身就是最好的检索词，城市交给 city 参数限定，避免搜出外地岗位
-  const searchKeyword = job ? job.title : '';
+  const fakeCenter = job
+    ? { name: job.company, address: job.address, city, lng: job.lng || 0, lat: job.lat || 0 }
+    : { name: '', address: '', city, lng: 0, lat: 0 };
+  const searchKeyword = job ? buildJobSearchKeyword(fakeCenter, job) : '';
+  const platformLinks = job ? buildJobPlatformLinks(fakeCenter, job) : null;
 
-  // 手机扫码直达：BOSS直聘该城市同岗位搜索 / 高德定位单位
+  // 手机扫码直达：BOSS直聘精准区县搜索 / 58同城手机直通 / 高德定位单位
   useEffect(() => {
-    if (!job) {
+    if (!job || !platformLinks) {
       setQrUrl('');
       return;
     }
     const target =
       qrMode === 'boss'
-        ? buildBossSearchUrl(city, job.title)
+        ? platformLinks.boss
+        : qrMode === 'wuba'
+        ? platformLinks.wuba
         : buildAmapWebUrl({
             name: job.company,
             address: job.address,
@@ -76,9 +81,10 @@ export const JobDetailSheet: React.FC<Props> = ({ job, city, amapKey, onClose, o
     return () => {
       cancelled = true;
     };
-  }, [job?.id, qrMode, city, job?.lng, job?.lat, job?.company, job?.title]);
+  }, [job?.id, qrMode, city, job?.lng, job?.lat, job?.company, job?.title, job?.district]);
 
-  const bossDirectUrl = job ? buildBossSearchUrl(city, job.title) : '';
+  const bossDirectUrl = platformLinks ? platformLinks.boss : '';
+  const wubaMobileUrl = platformLinks ? platformLinks.wuba : '';
   const amapDirectUrl = job
     ? buildAmapWebUrl({
         name: job.company,
@@ -89,10 +95,11 @@ export const JobDetailSheet: React.FC<Props> = ({ job, city, amapKey, onClose, o
         approx: job.geoApprox,
       })
     : '';
-  const scanOpenUrl = qrMode === 'boss' ? bossDirectUrl : amapDirectUrl;
+  const scanOpenUrl =
+    qrMode === 'boss' ? bossDirectUrl : qrMode === 'wuba' ? wubaMobileUrl : amapDirectUrl;
 
   const handleCopyKeyword = async () => {
-    const text = qrMode === 'boss' ? searchKeyword : `${cleanCity} ${job?.company || ''}`.trim();
+    const text = qrMode === 'amap' ? `${cleanCity} ${job?.company || ''}`.trim() : searchKeyword;
     const ok = await copyTextSilently(text);
     if (ok) {
       setCopied(true);
@@ -110,13 +117,10 @@ export const JobDetailSheet: React.FC<Props> = ({ job, city, amapKey, onClose, o
     amapKey,
     zoom: 16,
   });
-  const photos = [...(job.photos || []), ...(mapPhoto ? [mapPhoto] : [])];
+  const basePhotos = jobPhotos(job);
+  const photos = [...basePhotos, ...(mapPhoto ? [mapPhoto] : [])];
   const currentPhoto = photos[Math.min(activePhoto, photos.length - 1)];
-  const photoSource = isStaticMapUrl(currentPhoto)
-    ? '高德位置图'
-    : isAmapPhoto(currentPhoto)
-    ? '高德实景图'
-    : '示意图';
+  const photoSource = getPhotoSourceLabel(currentPhoto, 'AI参考图');
 
   const facts: { label: string; value: string; icon: React.ReactNode }[] = [
     { label: '薪资', value: job.salaryText, icon: <Banknote size={13} /> },
@@ -270,6 +274,13 @@ export const JobDetailSheet: React.FC<Props> = ({ job, city, amapKey, onClose, o
                 </button>
                 <button
                   type="button"
+                  className={qrMode === 'wuba' ? 'active' : ''}
+                  onClick={() => setQrMode('wuba')}
+                >
+                  58同城
+                </button>
+                <button
+                  type="button"
                   className={qrMode === 'amap' ? 'active' : ''}
                   onClick={() => setQrMode('amap')}
                 >
@@ -287,12 +298,14 @@ export const JobDetailSheet: React.FC<Props> = ({ job, city, amapKey, onClose, o
               <div className="jb-scan-side">
                 <p>
                   {qrMode === 'boss'
-                    ? `手机扫一下，直接进 BOSS直聘 搜「${job.title}」（限定${cleanCity || '当前城市'}），看真实在招岗位`
-                    : `扫一下在手机高德地图上定位「${job.company}」，先看看单位在哪儿再决定去不去面试`}
+                    ? `手机扫一下，在 BOSS 直聘搜「${searchKeyword}」（限定${cleanCity || '当前城市'}），看同片区真实岗位`
+                    : qrMode === 'wuba'
+                    ? `手机扫一下，200 直通 58 同城搜「${searchKeyword}」（避开电脑滑动验证）`
+                    : `扫一下在手机高德地图上定位「${job.company}」，先看门店位置与街景再决定`}
                 </p>
                 <div className="jb-scan-actions">
                   <button type="button" onClick={() => void handleCopyKeyword()}>
-                    <Copy size={12} /> {copied ? '已复制' : qrMode === 'boss' ? '复制搜索词' : '复制单位名'}
+                    <Copy size={12} /> {copied ? '已复制' : qrMode === 'amap' ? '复制单位名' : '复制搜索词'}
                   </button>
                   {scanOpenUrl && (
                     <a href={scanOpenUrl} target="_blank" rel="noopener noreferrer">

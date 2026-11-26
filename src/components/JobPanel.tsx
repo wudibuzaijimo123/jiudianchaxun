@@ -18,15 +18,17 @@ import {
   JOB_TYPE_OPTIONS,
   applyJobFilters,
   buildJobPlatformLinks,
+  buildJobSearchKeyword,
   searchJobs,
 } from '../services/jobService';
 import { LlmConfig, PlaceSuggestion, SearchCenter } from '../types/hotel';
 import { JobFilterState, JobListing, JobSortMode } from '../types/job';
-import { openInAmap } from '../utils/mapLaunch';
-import { copyTextSilently } from '../utils/deepLinks';
+import { amapTargetFrom, buildAmapWebUrl, openInAmap } from '../utils/mapLaunch';
+import { copyTextSilently, isMobileDevice } from '../utils/deepLinks';
 import { openExternalUrl, reserveTab } from '../utils/nativeBridge';
 import { JobCard } from './JobCard';
 import { JobDetailSheet } from './JobDetailSheet';
+import { SmartJumpModal, SmartJumpTarget } from './SmartJumpModal';
 import './job.css';
 
 const RADIUS_OPTIONS = [
@@ -86,6 +88,7 @@ export const JobPanel: React.FC<Props> = ({
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(false);
   const [detail, setDetail] = useState<JobListing | null>(null);
+  const [jumpModalTarget, setJumpModalTarget] = useState<SmartJumpTarget | null>(null);
   const [showFilters, setShowFilters] = useState(false);
 
   const [query, setQuery] = useState(center.name);
@@ -133,14 +136,14 @@ export const JobPanel: React.FC<Props> = ({
         setLoading(false);
       }
     },
-    [center, filters.radius, llmConfig, serpApiKey, serverBaseUrl, onToast]
+    [center, filters.radius, llmConfig, amapKey, serpApiKey, serverBaseUrl, onToast]
   );
 
   useEffect(() => {
     void runSearch(false);
-    // 仅在地点或接口配置变化时重新联网检索
+    // 地点、高德 Key 或大模型配置变化时重新检索
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [center.lng, center.lat, llmConfig.apiKey, llmConfig.baseUrl, llmConfig.model, serverBaseUrl]);
+  }, [center.lng, center.lat, amapKey, llmConfig.apiKey, llmConfig.baseUrl, llmConfig.model, serverBaseUrl]);
 
   // 地名联想
   useEffect(() => {
@@ -190,16 +193,45 @@ export const JobPanel: React.FC<Props> = ({
         return;
       }
 
-      // 与酒店/租房一致：先复制精准搜索词，再打开平台粘贴
-      const keyword = `${String(center.city || '').replace(/市$/, '')} ${job.title} 招聘`.trim();
-      // 先占位，避免复制完成后 window.open 被当弹窗拦截
+      const keyword = buildJobSearchKeyword(center, job);
+      const links = buildJobPlatformLinks(center, job);
+
+      // 58同城招聘 PC 网页会自动弹安全验证，而 m.58.com/<slug>/job/ 手机端 200 直通，因此在电脑端弹出扫码直达
+      if (!isMobileDevice() && platform === 'wuba') {
+        await copyTextSilently(keyword);
+        setJumpModalTarget({
+          platformName: '58同城招聘',
+          accentColor: '#ff552e',
+          itemTitle: `${job.title} · ${job.salaryText}`,
+          itemSub: `${job.company} · ${job.address}`,
+          keyword,
+          mobileQrUrl: links.wuba,
+          altQrLabel: '高德定位单位',
+          altQrUrl: buildAmapWebUrl(
+            amapTargetFrom({
+              name: job.company,
+              address: job.address,
+              city: center.city,
+              lng: job.lng,
+              lat: job.lat,
+              geoApprox: job.geoApprox,
+            })
+          ),
+          pcFallbackUrl: links.wubaPc,
+          reasonHint: '58同城招聘电脑端易弹出防刷验证；手机扫码可 200 直通当地 58 同城岗位搜索！',
+        });
+        return;
+      }
+
+      // BOSS直聘、智联或手机端：直接携带区域+岗位关键词精准直达
       const tab = reserveTab();
       const copied = await copyTextSilently(keyword);
       onToast(
-        copied ? `已复制「${keyword}」，进入平台粘贴搜索` : `正在打开平台，进入后搜索「${keyword}」`
+        copied
+          ? `已复制精准词「${keyword}」，正在跳转到对应招聘页`
+          : `正在跳转到对应招聘页（建议搜：${keyword}）`
       );
 
-      const links = buildJobPlatformLinks(center, job);
       void openExternalUrl(links[platform], tab);
     },
     [center, onToast]
@@ -463,6 +495,8 @@ export const JobPanel: React.FC<Props> = ({
         onClose={() => setDetail(null)}
         onJump={(j, platform) => handleJump(j, platform)}
       />
+
+      <SmartJumpModal target={jumpModalTarget} onClose={() => setJumpModalTarget(null)} />
     </div>
   );
 };

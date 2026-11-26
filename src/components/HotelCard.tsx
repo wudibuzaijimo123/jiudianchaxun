@@ -7,6 +7,7 @@ import {
   ChevronUp,
   ExternalLink,
   Heart,
+  Images,
   Loader2,
   MapPin,
   Navigation2,
@@ -20,6 +21,7 @@ import { FALLBACK_HOTEL_PHOTOS } from '../data/demoHotels';
 import { CardRoomRow, HotelItem } from '../types/hotel';
 import { estimateTravelHint, formatDistance } from '../utils/coordTransform';
 import { openExternalUrl } from '../utils/nativeBridge';
+import { isAmapPhoto, photoSrc } from '../utils/rentalImages';
 
 interface Props {
   hotel: HotelItem;
@@ -93,7 +95,7 @@ export const HotelCard: React.FC<Props> = ({
     >
       <div className="hotel-card-thumb">
         <img
-          src={coverUrl}
+          src={photoSrc(coverUrl)}
           alt={hotel.name}
           loading="lazy"
           referrerPolicy="no-referrer"
@@ -104,6 +106,12 @@ export const HotelCard: React.FC<Props> = ({
           }}
         />
         <span className={`cat-badge cat-${hotel.category}`}>{hotel.categoryLabel}</span>
+        {hotel.photos.length > 1 && (
+          <span className="rt-photo-count">
+            <Images size={10} /> {hotel.photos.length}
+          </span>
+        )}
+        {isAmapPhoto(coverUrl) && <span className="rt-photo-src amap">高德</span>}
 
         {hotel.availability === 'sold_out' ? (
           <span className="avail-badge full">今日满房</span>

@@ -19,9 +19,9 @@ import {
 import { RentalListing } from '../types/rental';
 import { formatDistance } from '../utils/coordTransform';
 import { copyTextSilently } from '../utils/deepLinks';
-import { buildAnjukeMobileUrl } from '../services/rentalService';
+import { buildAnjukeMobileUrl, buildRentalPlatformLinks } from '../services/rentalService';
 import { buildAmapWebUrl } from '../utils/mapLaunch';
-import { RENTAL_FALLBACK_PHOTOS, buildAmapStaticMapUrl, isAmapPhoto, isStaticMapUrl, photoSrc, rentalPhotos } from '../utils/rentalImages';
+import { getPhotoSourceLabel, RENTAL_FALLBACK_PHOTOS, buildAmapStaticMapUrl, isStaticMapUrl, photoSrc, rentalPhotos } from '../utils/rentalImages';
 
 interface Props {
   listing: RentalListing | null;
@@ -38,7 +38,7 @@ const FACILITY_ICON_FALLBACK = '·';
 
 export const RentalDetailSheet: React.FC<Props> = ({ listing, city, amapKey, onClose, onJump }) => {
   const [activePhoto, setActivePhoto] = useState(0);
-  const [qrMode, setQrMode] = useState<'anjuke' | 'amap'>('anjuke');
+  const [qrMode, setQrMode] = useState<'anjuke' | 'wuba' | 'amap'>('anjuke');
   const [qrUrl, setQrUrl] = useState('');
   const [copied, setCopied] = useState(false);
 
@@ -48,15 +48,19 @@ export const RentalDetailSheet: React.FC<Props> = ({ listing, city, amapKey, onC
 
   const cleanCity = String(city || '').replace(/市$/, '');
 
-  // 手机扫码直达：安居客该小区租房搜索页 / 高德地图定位
+  // 手机扫码直达：安居客 / 58同城手机站 / 高德地图定位
   useEffect(() => {
     if (!listing) {
       setQrUrl('');
       return;
     }
+    const fakeCenter = { name: listing.community, address: listing.address, city, lng: listing.lng || 0, lat: listing.lat || 0 };
+    const links = buildRentalPlatformLinks(fakeCenter, listing);
     const target =
       qrMode === 'anjuke'
         ? buildAnjukeMobileUrl(city, listing)
+        : qrMode === 'wuba'
+        ? links.wuba
         : buildAmapWebUrl({
             name: listing.community,
             address: listing.address,
@@ -98,6 +102,11 @@ export const RentalDetailSheet: React.FC<Props> = ({ listing, city, amapKey, onC
       ? listing
         ? buildAnjukeMobileUrl(city, listing)
         : ''
+      : qrMode === 'wuba' && listing
+      ? buildRentalPlatformLinks(
+          { name: listing.community, address: listing.address, city, lng: listing.lng || 0, lat: listing.lat || 0 },
+          listing
+        ).wuba
       : amapDirectUrl;
 
   const handleCopyKeyword = async () => {
@@ -120,14 +129,10 @@ export const RentalDetailSheet: React.FC<Props> = ({ listing, city, amapKey, onC
     amapKey,
     zoom: 15,
   });
-  // 房源图在前，位置地图垫底
+  // 高德实景图 + AI 多户型街景参考图 + 高德位置图
   const photos = mapPhoto ? [...photoList, mapPhoto] : photoList;
   const currentPhoto = photos[Math.min(activePhoto, photos.length - 1)];
-  const photoSource = isStaticMapUrl(currentPhoto)
-    ? '高德位置图'
-    : isAmapPhoto(currentPhoto)
-    ? '高德实景图'
-    : '房型示意图';
+  const photoSource = getPhotoSourceLabel(currentPhoto, 'AI参考图');
 
   const facts: { label: string; value: string; icon: React.ReactNode }[] = [
     { label: '出租方式', value: listing.kind, icon: <Building2 size={13} /> },
@@ -298,6 +303,13 @@ export const RentalDetailSheet: React.FC<Props> = ({ listing, city, amapKey, onC
                 </button>
                 <button
                   type="button"
+                  className={qrMode === 'wuba' ? 'active' : ''}
+                  onClick={() => setQrMode('wuba')}
+                >
+                  58同城
+                </button>
+                <button
+                  type="button"
                   className={qrMode === 'amap' ? 'active' : ''}
                   onClick={() => setQrMode('amap')}
                 >
@@ -315,7 +327,9 @@ export const RentalDetailSheet: React.FC<Props> = ({ listing, city, amapKey, onC
               <div className="rt-scan-side">
                 <p>
                   {qrMode === 'anjuke'
-                    ? `手机扫一下，直接进安居客看「${listing.community}」的租房信息（${cleanCity || '当前城市'}）`
+                    ? `手机扫一下，直接进安居客看「${listing.community}」租房信息（${cleanCity || '当前城市'}）`
+                    : qrMode === 'wuba'
+                    ? `手机扫一下，200 直通 58 同城手机端搜「${listing.community}」（避开电脑滑动验证）`
                     : `扫一下在手机高德地图上定位「${listing.community}」，可直接导航过去看房`}
                 </p>
                 <div className="rt-scan-actions">

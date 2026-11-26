@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { RentalKind, RentalListing } from '../types/rental';
 import { formatDistance } from '../utils/coordTransform';
-import { isAmapPhoto, photoSrc, rentalPhotos } from '../utils/rentalImages';
+import { getPhotoSourceLabel, isAmapPhoto, photoSrc, rentalPhotos } from '../utils/rentalImages';
 
 const KIND_TONE: Record<RentalKind, string> = {
   整租: 'whole',
@@ -60,7 +60,11 @@ export const RentalCard: React.FC<Props> = ({ listing, onOpen, onJump }) => {
         )}
         <span className={`rt-kind-badge tone-${tone}`}>{listing.kind}</span>
         {isDemo && <span className="rt-demo-badge">示例</span>}
-        {showImg && isAmapPhoto(cover) && <span className="rt-photo-src amap">高德</span>}
+        {showImg && (
+          <span className={`rt-photo-src ${isAmapPhoto(cover) ? 'amap' : 'demo-pic'}`}>
+            {isAmapPhoto(cover) ? '高德' : getPhotoSourceLabel(cover, 'AI图').replace('参考图', '图')}
+          </span>
+        )}
         {showImg && photos.length > 1 && (
           <span className="rt-photo-count">
             <Images size={10} /> {photos.length}

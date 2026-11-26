@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Building2, ExternalLink, GraduationCap, MapPin, Navigation2, Users } from 'lucide-react';
+import { Building2, ExternalLink, GraduationCap, Images, MapPin, Navigation2, Users } from 'lucide-react';
 import { JobListing } from '../types/job';
 import { formatDistance } from '../utils/coordTransform';
-import { isAmapPhoto, photoSrc } from '../utils/rentalImages';
+import { isAmapPhoto, jobPhotos, photoSrc } from '../utils/rentalImages';
 
 interface Props {
   job: JobListing;
@@ -26,7 +26,8 @@ export const JobCard: React.FC<Props> = ({ job, onOpen, onJump }) => {
   const isDemo = job.source === 'demo';
   const tone = toneOf(job.company);
   const initial = (job.company || '招').slice(0, 1);
-  const cover = (job.photos || [])[0];
+  const photos = jobPhotos(job);
+  const cover = photos[0];
   const [imgError, setImgError] = useState(false);
   const showImg = Boolean(cover) && !imgError;
 
@@ -46,7 +47,16 @@ export const JobCard: React.FC<Props> = ({ job, onOpen, onJump }) => {
           ) : (
             initial
           )}
-          {showImg && isAmapPhoto(cover) && <span className="jb-logo-src">高德</span>}
+          {showImg && (
+            <span className={`jb-logo-src ${isAmapPhoto(cover) ? 'amap' : ''}`}>
+              {isAmapPhoto(cover) ? '高德' : 'AI图'}
+            </span>
+          )}
+          {showImg && photos.length > 1 && (
+            <span className="jb-logo-cnt">
+              <Images size={9} /> {photos.length}
+            </span>
+          )}
         </div>
 
         <div className="jb-main">

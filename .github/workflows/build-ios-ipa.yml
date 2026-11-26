@@ -1,11 +1,14 @@
 name: Build unsigned iOS IPA
 
-# 推送到 main 或手动触发后，在 GitHub 的 macOS 机器上自动打出未签名 .ipa，
-# 下载后用「全能签 / 轻松签 / Sideloadly」导入证书签名即可装机。
+# 推送到 main 或手动触发后，在 GitHub 的 macOS 机器上自动打出未签名 .ipa（应用名：查询工具），
+# 自动上传到 Actions Artifacts 并同步发布到 GitHub Releases，手机可直接下载签名装机。
 on:
   push:
     branches: [main]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build-ipa:
@@ -28,80 +31,90 @@ jobs:
       - name: Build web assets
         run: npm run build
 
-      - name: Add iOS platform (first run)
+      - name: Add & sync Capacitor iOS platform
         run: |
           if [ ! -d ios ]; then
             npx cap add ios
           fi
           npx cap sync ios
 
-      # cap add ios 生成的是 Capacitor 默认白底蓝叉占位图标，这里换成 resources/icon.png
-      # 图标源文件必须是 1024x1024、不透明、直角；iOS 会自己裁圆角
-      - name: Inject app icon
+      # 从 resources/icon.png 切出全套标准 iOS 图标尺寸，100% 兼容轻松签/全能签/巨魔/Sideloadly 等全部签名工具
+      - name: Generate full iOS AppIcon set from resources/icon.png
         run: |
           set -e
           SRC="resources/icon.png"
           DEST_DIR="ios/App/App/Assets.xcassets/AppIcon.appiconset"
           if [ ! -f "$SRC" ]; then
-            echo "缺少 $SRC，跳过图标替换（会保留 Capacitor 默认图标）"
-            exit 0
+            echo "错误：缺少 $SRC"
+            exit 1
           fi
           mkdir -p "$DEST_DIR"
           find "$DEST_DIR" -name "*.png" -delete
-          cp "$SRC" "$DEST_DIR/AppIcon-512@2x.png"
+
+          sips -z 40 40     "$SRC" --out "$DEST_DIR/AppIcon-20@2x.png" >/dev/null
+          sips -z 60 60     "$SRC" --out "$DEST_DIR/AppIcon-20@3x.png" >/dev/null
+          sips -z 58 58     "$SRC" --out "$DEST_DIR/AppIcon-29@2x.png" >/dev/null
+          sips -z 87 87     "$SRC" --out "$DEST_DIR/AppIcon-29@3x.png" >/dev/null
+          sips -z 80 80     "$SRC" --out "$DEST_DIR/AppIcon-40@2x.png" >/dev/null
+          sips -z 120 120   "$SRC" --out "$DEST_DIR/AppIcon-40@3x.png" >/dev/null
+          sips -z 120 120   "$SRC" --out "$DEST_DIR/AppIcon-60@2x.png" >/dev/null
+          sips -z 180 180   "$SRC" --out "$DEST_DIR/AppIcon-60@3x.png" >/dev/null
+          sips -z 76 76     "$SRC" --out "$DEST_DIR/AppIcon-76@1x.png" >/dev/null
+          sips -z 152 152   "$SRC" --out "$DEST_DIR/AppIcon-76@2x.png" >/dev/null
+          sips -z 167 167   "$SRC" --out "$DEST_DIR/AppIcon-83.5@2x.png" >/dev/null
+          cp "$SRC" "$DEST_DIR/AppIcon-1024.png"
+
           cat > "$DEST_DIR/Contents.json" <<'JSON'
           {
             "images" : [
-              {
-                "filename" : "AppIcon-512@2x.png",
-                "idiom" : "universal",
-                "platform" : "ios",
-                "size" : "1024x1024"
-              }
+              { "size" : "20x20", "idiom" : "iphone", "filename" : "AppIcon-20@2x.png", "scale" : "2x" },
+              { "size" : "20x20", "idiom" : "iphone", "filename" : "AppIcon-20@3x.png", "scale" : "3x" },
+              { "size" : "29x29", "idiom" : "iphone", "filename" : "AppIcon-29@2x.png", "scale" : "2x" },
+              { "size" : "29x29", "idiom" : "iphone", "filename" : "AppIcon-29@3x.png", "scale" : "3x" },
+              { "size" : "40x40", "idiom" : "iphone", "filename" : "AppIcon-40@2x.png", "scale" : "2x" },
+              { "size" : "40x40", "idiom" : "iphone", "filename" : "AppIcon-40@3x.png", "scale" : "3x" },
+              { "size" : "60x60", "idiom" : "iphone", "filename" : "AppIcon-60@2x.png", "scale" : "2x" },
+              { "size" : "60x60", "idiom" : "iphone", "filename" : "AppIcon-60@3x.png", "scale" : "3x" },
+              { "size" : "76x76", "idiom" : "ipad", "filename" : "AppIcon-76@1x.png", "scale" : "1x" },
+              { "size" : "76x76", "idiom" : "ipad", "filename" : "AppIcon-76@2x.png", "scale" : "2x" },
+              { "size" : "83.5x83.5", "idiom" : "ipad", "filename" : "AppIcon-83.5@2x.png", "scale" : "2x" },
+              { "size" : "1024x1024", "idiom" : "ios-marketing", "filename" : "AppIcon-1024.png", "scale" : "1x" }
             ],
-            "info" : {
-              "author" : "xcode",
-              "version" : 1
-            }
+            "info" : { "version" : 1, "author" : "xcode" }
           }
           JSON
-          echo "---- 图标已就位 ----"
-          ls -l "$DEST_DIR"
-          # 用 macOS 自带 sips 校验尺寸与透明度（不依赖额外工具）
-          W=$(sips -g pixelWidth "$DEST_DIR/AppIcon-512@2x.png" | awk '/pixelWidth/{print $2}')
-          H=$(sips -g pixelHeight "$DEST_DIR/AppIcon-512@2x.png" | awk '/pixelHeight/{print $2}')
-          A=$(sips -g hasAlpha "$DEST_DIR/AppIcon-512@2x.png" | awk '/hasAlpha/{print $2}')
-          echo "icon=${W}x${H} hasAlpha=${A}"
-          if [ "$W" != "1024" ] || [ "$H" != "1024" ]; then
-            echo "图标必须是 1024x1024，当前 ${W}x${H}"
-            exit 1
-          fi
-          if [ "$A" = "yes" ]; then
-            echo "警告：图标带 Alpha 通道，建议导出为不带透明度的 PNG"
-          fi
+          ls -lh "$DEST_DIR"
 
-      - name: Inject Info.plist keys
+      - name: Configure Info.plist (App Name = 查询工具, GPS, ATS HTTP, URL Schemes)
         run: |
           PLIST="ios/App/App/Info.plist"
           set_kv() {
             /usr/libexec/PlistBuddy -c "Add :$1 string $2" "$PLIST" 2>/dev/null \
               || /usr/libexec/PlistBuddy -c "Set :$1 $2" "$PLIST"
           }
-          set_kv NSLocationWhenInUseUsageDescription "用于获取你当前位置，检索周边酒店、宾馆与租房房源"
           set_kv CFBundleDisplayName "查询工具"
+          set_kv CFBundleName "查询工具"
+          set_kv NSLocationWhenInUseUsageDescription "用于获取你当前位置，检索周边酒店、租房房源与附近在招岗位"
+          set_kv NSLocationAlwaysAndWhenInUseUsageDescription "用于获取你当前位置，检索周边酒店、租房房源与附近在招岗位"
 
-          # 允许查询这些 App 是否安装（跳转美团/抖音/高德/携程用）
+          # 允许加载高德 HTTP 图床照片及用户自建 HTTP 云服务器地址
+          /usr/libexec/PlistBuddy -c "Delete :NSAppTransportSecurity" "$PLIST" 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity dict" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoads bool true" "$PLIST"
+
+          # 允许唤起美团、抖音、高德、百度、携程、安居客、58、贝壳、BOSS直聘等原生 App
           /usr/libexec/PlistBuddy -c "Delete :LSApplicationQueriesSchemes" "$PLIST" 2>/dev/null || true
           /usr/libexec/PlistBuddy -c "Add :LSApplicationQueriesSchemes array" "$PLIST"
-          for scheme in imeituan snssdk1128 iosamap baidumap ctrip diditaxi; do
+          for scheme in imeituan snssdk1128 iosamap baidumap ctrip diditaxi openanjuke wbmain lianjiabeike bosszp weixin alipay; do
             /usr/libexec/PlistBuddy -c "Add :LSApplicationQueriesSchemes: string $scheme" "$PLIST"
           done
 
           echo "---- Info.plist 校验 ----"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleDisplayName" "$PLIST"
           /usr/libexec/PlistBuddy -c "Print :NSLocationWhenInUseUsageDescription" "$PLIST"
-          /usr/libexec/PlistBuddy -c "Print :LSApplicationQueriesSchemes" "$PLIST"
+          /usr/libexec/PlistBuddy -c "Print :NSAppTransportSecurity" "$PLIST"
 
-      - name: Build unsigned .app
+      - name: Build unsigned .app via Xcode
         working-directory: ios/App
         run: |
           if [ -d App.xcworkspace ]; then
@@ -109,7 +122,6 @@ jobs:
           else
             PROJECT_ARGS="-project App.xcodeproj"
           fi
-          echo "使用 $PROJECT_ARGS 编译"
           xcodebuild $PROJECT_ARGS \
             -scheme App \
             -configuration Release \
@@ -129,17 +141,35 @@ jobs:
             echo "未找到编译产物 .app"
             exit 1
           fi
-          echo "产物：$APP_PATH"
-          rm -rf Payload jiudianchaxun-unsigned.ipa
+          rm -rf Payload chaxun-tool-unsigned.ipa jiudianchaxun-unsigned.ipa
           mkdir -p Payload
           cp -R "$APP_PATH" Payload/
-          zip -qry jiudianchaxun-unsigned.ipa Payload
-          ls -lh jiudianchaxun-unsigned.ipa
+          zip -qry chaxun-tool-unsigned.ipa Payload
+          cp chaxun-tool-unsigned.ipa jiudianchaxun-unsigned.ipa
+          ls -lh chaxun-tool-unsigned.ipa
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
         with:
-          name: jiudianchaxun-unsigned-ipa
-          path: jiudianchaxun-unsigned.ipa
+          name: chaxun-tool-unsigned-ipa
+          path: chaxun-tool-unsigned.ipa
           if-no-files-found: error
           retention-days: 30
+
+      - name: Publish Unsigned IPA to GitHub Releases (latest-ipa)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest-ipa
+          target_commitish: ${{ github.sha }}
+          name: "查询工具 iOS 未签名安装包 (自动更新)"
+          body: |
+            自动编译的最新 iOS 未签名 `.ipa` 安装包（推送到 `main` 即自动更新）：
+            - **桌面应用名**：`查询工具`
+            - **桌面图标**：`resources/icon.png` 全尺寸高清图标集
+            - **支持能力**：酒店 + 租房 + 招聘三合一；可**脱离服务器纯手机端侧独立运行**（填好高德 Web服务 Key + 大模型 Key 即可直接查），也支持可选连接自家云服务器。
+
+            直接下载下方 **`chaxun-tool-unsigned.ipa`**（或同内容的 `jiudianchaxun-unsigned.ipa`），使用 **轻松签 / 全能签 / 巨魔 TrollStore / 牛蛙助手 / Sideloadly** 签名即可装机！
+          files: |
+            chaxun-tool-unsigned.ipa
+            jiudianchaxun-unsigned.ipa
+          prerelease: false

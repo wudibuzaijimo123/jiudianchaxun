@@ -46,23 +46,29 @@ export const PRESET_LANDMARKS: SearchCenter[] = [
   },
 ];
 
-// 高质感酒店实景占位图 (Unsplash 精选酒店客房与大堂)
+// 高质感本地 AI + 实景酒店参考图（多图图集，IPA/弱网下也可秒开）
+const ASSET_BASE = (import.meta.env.BASE_URL || './').replace(/\/+$/, '');
+
 export const FALLBACK_HOTEL_PHOTOS: Record<Exclude<HotelCategory, 'all'>, string[]> = {
   luxury: [
-    'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=800&q=80',
-    'https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=800&q=80',
+    `${ASSET_BASE}/ai-refs/hotel-suite.webp`,
+    `${ASSET_BASE}/ai-refs/hotel-lobby.webp`,
+    `${ASSET_BASE}/ai-refs/hotel-twin.webp`,
   ],
   comfort: [
-    'https://images.unsplash.com/photo-1618773928121-c32242e63f39?auto=format&fit=crop&w=800&q=80',
-    'https://images.unsplash.com/photo-1590490360182-c33d57733427?auto=format&fit=crop&w=800&q=80',
+    `${ASSET_BASE}/ai-refs/hotel-twin.webp`,
+    `${ASSET_BASE}/ai-refs/hotel-king.webp`,
+    `${ASSET_BASE}/ai-refs/hotel-lobby.webp`,
   ],
   economy: [
-    'https://images.unsplash.com/photo-1631049307264-da0ec9d70304?auto=format&fit=crop&w=800&q=80',
-    'https://images.unsplash.com/photo-1595576508898-0ad5c879a061?auto=format&fit=crop&w=800&q=80',
+    `${ASSET_BASE}/ai-refs/hotel-king.webp`,
+    `${ASSET_BASE}/ai-refs/hotel-twin.webp`,
+    `${ASSET_BASE}/ai-refs/campus-street.webp`,
   ],
   homestay: [
-    'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?auto=format&fit=crop&w=800&q=80',
-    'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?auto=format&fit=crop&w=800&q=80',
+    `${ASSET_BASE}/rentals/apt.webp`,
+    `${ASSET_BASE}/rentals/whole.webp`,
+    `${ASSET_BASE}/ai-refs/campus-street.webp`,
   ],
 };
 

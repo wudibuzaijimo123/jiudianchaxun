@@ -1491,6 +1491,25 @@
   }
 }
 
+/* 宽屏桌面优化：租房卡片 2 列网格排布 + 更清晰的悬停边框 */
+@media (min-width: 960px) {
+  .rent-mode .rt-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(460px, 1fr));
+    align-content: start;
+    gap: 12px;
+  }
+
+  .rent-mode .rt-loading,
+  .rent-mode .rt-empty {
+    grid-column: 1 / -1;
+  }
+
+  .rt-card:hover {
+    border-color: #bfdbfe;
+  }
+}
+
 /* 常驻距离条 */
 .rt-radius-row {
   display: flex;

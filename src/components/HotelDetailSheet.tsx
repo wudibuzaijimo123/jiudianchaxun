@@ -47,12 +47,19 @@ import {
   launchMeituanPurchase,
   smartLaunchPlatform,
 } from '../utils/deepLinks';
+import {
+  buildAmapStaticMapUrl,
+  getPhotoSourceLabel,
+  isStaticMapUrl,
+  photoSrc,
+} from '../utils/rentalImages';
 
 interface Props {
   hotel: HotelItem | null;
   isFavorite: boolean;
   checkIn: string;
   checkOut: string;
+  amapKey?: string;
   serpApiKey: string;
   llmConfig: LlmConfig;
   onClose: () => void;
@@ -67,6 +74,7 @@ export const HotelDetailSheet: React.FC<Props> = ({
   isFavorite,
   checkIn,
   checkOut,
+  amapKey = '',
   serpApiKey,
   llmConfig,
   onClose,
@@ -215,9 +223,19 @@ export const HotelDetailSheet: React.FC<Props> = ({
 
   if (!hotel) return null;
 
-  const photos =
+  const basePhotos =
     hotel.photos.length > 0 ? hotel.photos : FALLBACK_HOTEL_PHOTOS[hotel.category];
+  const mapPhoto = buildAmapStaticMapUrl({
+    lng: hotel.lng,
+    lat: hotel.lat,
+    amapKey,
+    zoom: 16,
+  });
+  const photos = Array.from(
+    new Set<string>([...basePhotos, ...FALLBACK_HOTEL_PHOTOS[hotel.category], ...(mapPhoto ? [mapPhoto] : [])])
+  ).slice(0, 7);
   const currentPhoto = photos[activePhotoIdx % photos.length];
+  const photoLabel = getPhotoSourceLabel(currentPhoto, 'AI参考图');
   const mobile = isMobileDevice();
   const appleEnv = isAppleDevice();
 
@@ -245,16 +263,23 @@ export const HotelDetailSheet: React.FC<Props> = ({
       <div className="detail-sheet" onClick={(e) => e.stopPropagation()}>
         <div className="sheet-drag-handle" />
 
-        <div className="detail-hero">
+        <div
+          className={`detail-hero ${isStaticMapUrl(currentPhoto) ? 'is-map' : ''}`}
+          onClick={() => {
+            if (isStaticMapUrl(currentPhoto)) {
+              void smartLaunchPlatform(hotel, 'amap', onToast, serpApiKey);
+            }
+          }}
+        >
           <img
-            src={currentPhoto}
+            src={photoSrc(currentPhoto)}
             alt={hotel.name}
             referrerPolicy="no-referrer"
             onError={(e) => {
               e.currentTarget.src = FALLBACK_HOTEL_PHOTOS[hotel.category][0];
             }}
           />
-          <div className="hero-top-actions">
+          <div className="hero-top-actions" onClick={(e) => e.stopPropagation()}>
             <button
               type="button"
               className={`circle-btn ${isFavorite ? 'fav-active' : ''}`}
@@ -268,21 +293,9 @@ export const HotelDetailSheet: React.FC<Props> = ({
             </button>
           </div>
 
-          {photos.length > 1 && (
-            <div className="photo-dots">
-              {photos.slice(0, 6).map((_, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  className={`p-dot ${idx === activePhotoIdx % photos.length ? 'active' : ''}`}
-                  onClick={() => setActivePhotoIdx(idx)}
-                />
-              ))}
-            </div>
-          )}
-
           <div className="hero-bottom-badges">
             <span className="hero-cat">{hotel.categoryLabel}</span>
+            <span className="hero-cat">{photoLabel}</span>
             {hotel.availability === 'sold_out' ? (
               <span className="hero-src warn">所选日期已满房</span>
             ) : (
@@ -290,6 +303,23 @@ export const HotelDetailSheet: React.FC<Props> = ({
             )}
           </div>
         </div>
+
+        {photos.length > 1 && (
+          <div className="hotel-thumbs-strip">
+            {photos.map((p, idx) => (
+              <button
+                key={`${p}-${idx}`}
+                type="button"
+                className={`hotel-thumb-btn ${idx === activePhotoIdx % photos.length ? 'active' : ''}`}
+                onClick={() => setActivePhotoIdx(idx)}
+                aria-label={`查看第 ${idx + 1} 张图`}
+              >
+                <img src={photoSrc(p)} alt="" referrerPolicy="no-referrer" />
+                {isStaticMapUrl(p) && <span className="ht-map-dot">地图</span>}
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className="detail-content">
           <div className="detail-title-group">

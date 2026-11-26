@@ -66,8 +66,15 @@ function isRealBookableHotel(name: string, rawType: string): boolean {
     return false;
   }
 
-  // 4. 排除养老、月子、宠物寄养等非普通住店场所
-  if (/养老院|敬老院|护理院|康养中心|月子中心|月子会所|宠物酒店|宠物寄养|猫咪寄养/.test(text)) {
+  // 4. 排除养老、月子、宠物寄养、洗浴网吧棋牌自习室等非普通住店场所
+  if (
+    /养老院|敬老院|护理院|康养中心|月子中心|月子会所|宠物酒店|宠物寄养|猫咪寄养|自习室|棋牌室|麻将馆|台球/.test(
+      text
+    )
+  ) {
+    return false;
+  }
+  if (/洗浴|汗蒸|足疗|足浴|汤泉|网吧|网咖|电竞馆/.test(name) && !/酒店|宾馆|民宿|客栈/.test(name)) {
     return false;
   }
 
@@ -795,11 +802,14 @@ async function fetchAmapNearbyPois(
                 .filter(Boolean)
             : [];
 
-          const photos: string[] = Array.isArray(poi.photos)
+          const amapPhotos: string[] = Array.isArray(poi.photos)
             ? poi.photos
                 .map((ph: any) => asStr(ph?.url))
                 .filter((u: string) => u.startsWith('http'))
             : [];
+          const combinedPhotos = Array.from(
+            new Set<string>([...amapPhotos, ...FALLBACK_HOTEL_PHOTOS[cls.category]])
+          ).slice(0, 6);
 
           const city = asStr(poi.cityname) || center.city || '';
           const district = asStr(poi.adname);
@@ -824,7 +834,7 @@ async function fetchAmapNearbyPois(
             priceSource: hasAmapCost ? ('amap_cost' as const) : ('none' as const),
             availability: 'unknown' as const,
             phones,
-            photos: photos.length > 0 ? photos : FALLBACK_HOTEL_PHOTOS[cls.category],
+            photos: combinedPhotos,
             tags: extractTags(name, rawType, businessArea, rectag, distance),
             roomHints: buildRoomHints(cls.category, officialPrice),
             source: 'amap' as const,

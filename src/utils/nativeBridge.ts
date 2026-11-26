@@ -1,7 +1,8 @@
 import { isNativePackagedApp } from '../services/standaloneClient';
 
-/** 需要在系统里唤起的第三方 App scheme */
-const CUSTOM_SCHEME = /^(imeituan|snssdk1128|iosamap|baidumap|ctrip|diditaxi|alipay|weixin):/i;
+/** 需要在系统里唤起的第三方 App scheme 及拨号/邮件协议 */
+const CUSTOM_SCHEME =
+  /^(imeituan|snssdk1128|iosamap|androidamap|baidumap|ctrip|diditaxi|openanjuke|wbmain|lianjiabeike|bosszp|alipay|weixin|tel|mailto):/i;
 
 export function isHttpUrl(url: string): boolean {
   return /^https?:\/\//i.test(url);

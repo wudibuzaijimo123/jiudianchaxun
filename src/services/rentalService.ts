@@ -9,8 +9,18 @@ import { extractJsonFromText, isNativePackagedApp, resolveApiUrl } from './stand
 import { calcDistanceMeters } from '../utils/coordTransform';
 import { anjukeCitySlug } from '../utils/citySlug';
 
-const CACHE_KEY = 'jdcx_rental_cache_v2';
+const CACHE_KEY = 'jdcx_rental_cache_v3';
 const CACHE_TTL = 30 * 60 * 1000;
+
+export interface GroundedCommunityPoi {
+  name: string;
+  district: string;
+  address: string;
+  distanceMeters: number;
+  lng: number;
+  lat: number;
+  photos: string[];
+}
 
 const RENTAL_KINDS: RentalKind[] = ['整租', '合租', '单间', '床位', '日租', '公寓'];
 
@@ -264,6 +274,59 @@ export async function enrichRentalMedia(
   return out;
 }
 
+/** 使用高德周边搜索检索搜索点周围真实的住宅小区/公寓/商住楼（防 AI 幻觉编造小区） */
+export async function fetchNearbyRealCommunities(
+  center: SearchCenter,
+  radius: number,
+  amapKey: string
+): Promise<GroundedCommunityPoi[]> {
+  const key = amapKey.trim();
+  if (!key) return [];
+  try {
+    const rMeters = Math.min(Math.max(radius, 1000), 10000);
+    const url =
+      `https://restapi.amap.com/v5/place/around?key=${encodeURIComponent(key)}` +
+      `&location=${center.lng},${center.lat}&types=120000|120200|120300&radius=${rMeters}` +
+      '&page_size=22&page_num=1&sortrule=distance&show_fields=photos';
+    const resp = await fetch(url);
+    const data = await resp.json();
+    if (data?.status !== '1' || !Array.isArray(data.pois)) return [];
+
+    const seen = new Set<string>();
+    const list: GroundedCommunityPoi[] = [];
+    for (const poi of data.pois) {
+      const name = String(poi.name || '').trim();
+      if (!name || seen.has(name)) continue;
+      if (/门$|入口|停车场|垃圾|物业|售楼|公厕/.test(name)) continue;
+      const [lngStr, latStr] = String(poi.location || '').split(',');
+      const lng = Number(lngStr);
+      const lat = Number(latStr);
+      if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
+
+      seen.add(name);
+      const dist = Number(poi.distance) > 0
+        ? Math.round(Number(poi.distance))
+        : calcDistanceMeters(center.lng, center.lat, lng, lat);
+      const district = String(poi.adname || '').trim();
+      const rawAddr = String(poi.address || '').trim();
+      const address = rawAddr
+        ? district && !rawAddr.startsWith(district)
+          ? `${district}${rawAddr}`
+          : rawAddr
+        : `${district}${name}`;
+      const photos = (Array.isArray(poi.photos) ? poi.photos : [])
+        .map((p: any) => String(p?.url || '').replace(/^http:\/\//i, 'https://'))
+        .filter((u: string) => /^https:\/\//i.test(u))
+        .slice(0, 4);
+
+      list.push({ name, district, address, distanceMeters: dist, lng, lat, photos });
+    }
+    return list;
+  } catch {
+    return [];
+  }
+}
+
 /** 半径越大给的条数越多，避免「换成 5km 还是同一批房子」 */
 export function rentalCountForRadius(radius: number): number {
   if (radius <= 1000) return 8;
@@ -277,22 +340,38 @@ export function buildRentalPrompt(
   center: SearchCenter,
   radius: number,
   count = rentalCountForRadius(3000),
-  maxRent: number | null = null
+  maxRent: number | null = null,
+  realPois: GroundedCommunityPoi[] = []
 ): string {
   const cleanCity = String(center.city || '').replace(/市$/, '');
   const rangeText = radius >= 1000 ? `${Math.round(radius / 1000)}km` : `${radius}m`;
   const near = Math.max(150, Math.round(radius * 0.08));
   const mid = Math.max(near + 200, Math.round(radius * 0.4));
+  const poiBlock =
+    realPois.length > 0
+      ? `【高德实测真实小区/公寓名单（必须严格从中选点，原样使用小区名、区县、地址和距离，严禁编造虚构小区名！）】：\n${realPois
+          .slice(0, 18)
+          .map(
+            (p, i) =>
+              `${i + 1}. 小区名="${p.name}" | 区县="${p.district}" | 真实地址="${p.address}" | 距中心=${p.distanceMeters}m`
+          )
+          .join('\n')}\n\n`
+      : '';
+
   return `你是中国本地租房信息检索引擎。请检索「${cleanCity} ${center.name}」周边 ${rangeText} 内的真实可租房源，参照安居客/58同城/贝壳该地段的挂牌特征，输出约 ${count} 条。
 
-硬性要求（很重要）：
-1. 小区 / 公寓 / 自建房 / 城中村名称必须互不相同；同一小区最多 2 条且户型不同；标题用「类型·小区名 户型」的形式，不要每条都以「${center.name}」开头，也不要几条房源只换个数字；
-2. 距离必须铺满整个 ${rangeText} 范围：约 1/3 在 ${near}-${mid}m，约 1/3 在 ${mid}m-${Math.round(
-    radius * 0.8
-  )}m，其余接近 ${rangeText} 上限；不要所有房源都挤在同一个距离数字附近；
+${poiBlock}硬性要求（很重要）：
+1. 同一小区最多 2 条且户型不同；标题用「类型·小区名 户型」的形式，不要每条都以「${center.name}」开头；
+2. ${
+    realPois.length > 0
+      ? 'community、district、address、distanceMeters 必须严格与上方实测真实小区一致；'
+      : `距离铺满整个 ${rangeText} 范围：约 1/3 在 ${near}-${mid}m，约 1/3 在 ${mid}m-${Math.round(
+          radius * 0.8
+        )}m，其余接近上限；`
+  }
 3. 租金分低、中、高三档，符合该城市该地段的真实行情${maxRent ? `，月租尽量不超过 ${maxRent} 元` : ''}；
-4. 类型混合整租、合租、单间、床位、日租；县城 / 城乡结合部多给单间、床位等低价选项，市区多给整租与合租；
-5. 每条给真实感的地址（街道 + 门牌号），不要编造房东手机号，不要输出联系方式字段。
+4. 类型混合整租、合租、单间、床位、日租、公寓；高校/县城周边多给单间、合租等实用选项；
+5. 不要编造房东手机号，不要输出联系方式字段。
 
 严格只返回 JSON 数组，不要任何解释文字，每项字段如下：
 [
@@ -314,7 +393,7 @@ export function buildRentalPrompt(
     "tags": ["近地铁", "有电梯", "可拎包入住"],
     "facilities": ["空调", "洗衣机", "热水器", "宽带", "独卫"],
     "distanceMeters": 420,
-    "basis": "该地段挂牌行情",
+    "basis": "${realPois.length > 0 ? '高德实测小区·地段行情' : '该地段挂牌行情'}",
     "riskNote": "合租需确认是否独卫"
   }
 ]`;
@@ -323,7 +402,8 @@ export function buildRentalPrompt(
 export async function callDirectClientRentals(
   llm: LlmConfig,
   center: SearchCenter,
-  radius: number
+  radius: number,
+  realPois: GroundedCommunityPoi[] = []
 ): Promise<any[]> {
   const cleanBase = (llm.baseUrl || 'https://api.deepseek.com/v1').replace(/\/+$/, '');
   const endpoint = cleanBase.endsWith('/chat/completions')
@@ -340,9 +420,12 @@ export async function callDirectClientRentals(
       model: llm.model || 'deepseek-chat',
       messages: [
         { role: 'system', content: '只输出合法的纯 JSON 数组，禁止任何多余解释。' },
-        { role: 'user', content: buildRentalPrompt(center, radius, rentalCountForRadius(radius)) },
+        {
+          role: 'user',
+          content: buildRentalPrompt(center, radius, rentalCountForRadius(radius), null, realPois),
+        },
       ],
-      temperature: 0.85,
+      temperature: realPois.length > 0 ? 0.5 : 0.8,
       max_tokens: 3600,
     }),
   });
@@ -513,7 +596,7 @@ export async function searchRentals(options: RentalQueryOptions): Promise<Rental
     maxRent = null,
     force,
   } = options;
-  const cacheKey = `${center.city}|${center.name}|${radius}|${maxRent ?? ''}`;
+  const cacheKey = `${center.city}|${center.name}|${radius}|${maxRent ?? ''}|${amapKey ? 'amap' : 'no'}`;
 
   if (!force) {
     const cached = readCache(cacheKey);
@@ -537,11 +620,32 @@ export async function searchRentals(options: RentalQueryOptions): Promise<Rental
     );
   }
 
+  // 先查高德周边真实小区名单（有高德 Key 时可大幅提升小区、地址、实景图和坐标准确性）
+  const realPois = await fetchNearbyRealCommunities(center, radius, amapKey);
+  const realPoiMap = new Map(realPois.map((p) => [p.name, p]));
+
   const finish = async (rawList: any[], notice = ''): Promise<RentalSearchResult> => {
     const seen = new Set<string>();
     const normalized = rawList
       .map((raw, idx) => normalizeListing(raw, idx))
       .filter((l): l is RentalListing => Boolean(l))
+      .map((l) => {
+        const matched =
+          realPoiMap.get(l.community) ||
+          realPois.find((p) => p.name.includes(l.community) || l.community.includes(p.name));
+        if (!matched) return l;
+        return {
+          ...l,
+          community: matched.name,
+          district: matched.district || l.district,
+          address: matched.address || l.address,
+          distanceMeters: matched.distanceMeters,
+          lng: matched.lng,
+          lat: matched.lat,
+          geoApprox: false,
+          photos: matched.photos.length > 0 ? matched.photos : l.photos,
+        };
+      })
       // 同名小区 + 同户型只保留一条，避免一张列表全是「XX小区」
       .filter((l) => {
         const key = `${l.community}|${l.kind}|${l.layout}`;
@@ -555,7 +659,10 @@ export async function searchRentals(options: RentalQueryOptions): Promise<Rental
     }
     const listings = await enrichRentalMedia(normalized, center, radius, amapKey);
     writeCache(cacheKey, listings);
-    return { listings, mode: 'ai', notice };
+    const mergedNotice =
+      notice ||
+      (realPois.length > 0 ? `已锚定周边 ${realPois.length} 个高德真实小区定位与实景图` : '');
+    return { listings, mode: 'ai', notice: mergedNotice };
   };
 
   let firstError = '';
@@ -573,6 +680,12 @@ export async function searchRentals(options: RentalQueryOptions): Promise<Rental
           radius,
           maxRent,
           count: rentalCountForRadius(radius),
+          realPois: realPois.map((p) => ({
+            name: p.name,
+            district: p.district,
+            address: p.address,
+            distanceMeters: p.distanceMeters,
+          })),
         }),
       });
       const data = await resp.json();
@@ -586,11 +699,11 @@ export async function searchRentals(options: RentalQueryOptions): Promise<Rental
   }
 
   try {
-    const direct = await callDirectClientRentals(llm, center, radius);
+    const direct = await callDirectClientRentals(llm, center, radius, realPois);
     return finish(direct, '');
   } catch (err: any) {
     const msg = err?.message || firstError || '网络异常';
-    return demoResult(center, `租房检索失败（${msg}），当前为示例数据。`);
+    return demoResult(center, `租房检索失败（${msg}），当前为示例数据。`, amapKey);
   }
 }
 
@@ -609,37 +722,38 @@ export function buildRentalSearchKeyword(
     .trim();
 }
 
-/** 安居客移动站直达链接（扫码用）：带城市前缀 + 关键词，手机打开就是该小区的租房搜索 */
+/** 安居客直达链接：实测 <slug>.zu.anjuke.com/fangyuan/?kw=... 在 PC 与 iPhone 均直通 200 且锁定对应城市与小区 */
 export function buildAnjukeMobileUrl(city: string, listing?: RentalListing | null): string {
   const slug = anjukeCitySlug(city);
-  const base = slug ? `https://m.anjuke.com/${slug}/rent/` : 'https://m.anjuke.com/rent/';
-  const kw = listing ? `${listing.community} 租房` : '租房';
-  return `${base}?kw=${encodeURIComponent(kw)}`;
+  const kw = listing ? listing.community : '租房';
+  if (slug) {
+    return `https://${slug}.zu.anjuke.com/fangyuan/?kw=${encodeURIComponent(kw)}`;
+  }
+  return 'https://zu.anjuke.com/fangyuan/';
 }
 
 /**
- * 各平台租房跳转。
- *
- * 注意：m.anjuke.com / m.58.com 带 kw 参数的搜索深链会被 58 系风控拦截
- * （跳到 callback.58.com/antibot 验证码页），所以这里只打开无参数的租房频道，
- * 关键词由调用方复制到剪贴板让用户粘贴搜索。
+ * 各平台租房跳转（基于实测 HTTP 状态码，区分电脑直跳 / 手机直达）。
  */
 export function buildRentalPlatformLinks(center: SearchCenter, listing?: RentalListing | null) {
   const cleanCity = String(center.city || '').replace(/市$/, '');
-  const kw = listing
-    ? `${cleanCity} ${listing.community}`.trim()
-    : `${cleanCity} ${center.name}`.trim();
-  const encoded = encodeURIComponent(kw);
+  const slug = anjukeCitySlug(center.city);
+  const kw = listing ? listing.community.trim() : center.name.trim();
+  const fullKw = listing ? `${cleanCity} ${listing.community}`.trim() : `${cleanCity} ${center.name}`.trim();
+  const encodedKw = encodeURIComponent(kw);
+  const encodedFull = encodeURIComponent(fullKw);
   const addr = listing ? `${cleanCity} ${listing.address}` : `${cleanCity} ${center.name}`;
 
   return {
-    anjuke: 'https://m.anjuke.com/rent/',
-    wuba: 'https://m.58.com/rent/',
-    beike: `https://m.ke.com/cz/?keyword=${encoded}`,
+    anjuke: buildAnjukeMobileUrl(center.city, listing),
+    wuba: `https://m.58.com/${slug ? `${slug}/` : ''}chuzu/?key=${encodedKw}`,
+    wubaPc: `https://${slug ? `${slug}.` : 'www.'}58.com/chuzu/?key=${encodedKw}`,
+    beike: slug ? `https://${slug}.zu.ke.com/zufang/` : `https://m.ke.com/cz/?keyword=${encodedFull}`,
+    beikeMobile: slug ? `https://m.ke.com/chuzu/${slug}/zufang/` : `https://m.ke.com/cz/`,
     amap: `https://uri.amap.com/search?keyword=${encodeURIComponent(addr)}&city=${encodeURIComponent(
       cleanCity
     )}&src=jiudianchaxun&callnative=1&coordinate=gaode`,
-    baidu: `https://www.baidu.com/s?wd=${encodeURIComponent(`${kw} 租房 月租`)}`,
+    baidu: `https://www.baidu.com/s?wd=${encodeURIComponent(`${fullKw} 租房 月租`)}`,
   };
 }
 
