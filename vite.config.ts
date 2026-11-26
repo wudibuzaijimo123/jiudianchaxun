@@ -14,6 +14,7 @@ const CACHE_TTL_MS = 25 * 60 * 1000;
 
 // 仅保存在当前运行进程内存中的局域网手机同步配置（绝不写入磁盘或仓库，供同一Wi-Fi手机免输Key同步）
 let lanMemorySyncState: Record<string, any> = {};
+const lanHotelTargets = new Map<string, any>();
 
 function getCached(key: string): CacheEntry | null {
   const hit = apiCache.get(key);
@@ -435,29 +436,25 @@ function backendProxyPlugin(): Plugin {
           }
 
           const cleanCity = String(city || '').replace(/市$/, '');
-          // 组合检索该地段及代表性门店在国内携程/美团/同程/抖音的公开挂牌价摘要
-          const sampleNames = targetSlice
-            .slice(0, 5)
-            .map((h: any) => `"${String(h.name).replace(/[（(].*?[)）]/g, '')}"`)
-            .join(' OR ');
+          // 针对当前批次每家门店单独并发检索其在携程/美团/同程/去哪儿的公开收录实价摘要，拒绝盲猜！
+          const perHotelSnippets = await Promise.all(
+            targetSlice.map(async (h: any) => {
+              if (!serpApiKey) return { id: h.id, text: '' };
+              const shortName = String(h.name).replace(/[（(].*?[)）]/g, '').trim() || h.name;
+              const rows = await searchCnWebSnippets(
+                `${cleanCity} "${shortName}" (携程 OR 美团 OR 同程 OR 去哪儿) (元 OR ¥ OR 房价)`,
+                serpApiKey
+              );
+              const text = rows
+                .slice(0, 3)
+                .map((r: any) => `${r.title}：${r.snippet}`)
+                .join(' | ');
+              return { id: h.id, text };
+            })
+          );
 
-          const [areaSnippets, hotelSnippets] = await Promise.all([
-            searchCnWebSnippets(
-              `${cleanCity} ${centerName} 附近酒店 宾馆 携程 美团 价格 多少钱一晚`,
-              serpApiKey || ''
-            ),
-            sampleNames
-              ? searchCnWebSnippets(
-                  `${cleanCity} (${sampleNames}) (携程 OR 同程 OR 美团 OR 抖音 OR 房价 OR 元)`,
-                  serpApiKey || ''
-                )
-              : Promise.resolve([]),
-          ]);
-
-          const mergedSnippets = [...hotelSnippets, ...areaSnippets]
-            .slice(0, 14)
-            .map((s: any, i: number) => `[网页${i + 1}] ${s.title}：${s.snippet}`)
-            .join('\n');
+          const snippetById = new Map<string, string>();
+          perHotelSnippets.forEach((p) => snippetById.set(String(p.id), p.text));
 
           const knownRefText =
             Array.isArray(knownPrices) && knownPrices.length > 0
@@ -468,41 +465,38 @@ function backendProxyPlugin(): Plugin {
               : '暂无';
 
           const hotelListText = targetSlice
-            .map(
-              (h: any, idx: number) =>
-                `${idx + 1}. id="${h.id}" | 店名="${h.name}" | 类型="${h.categoryLabel}" | 地址="${h.address}" | 距中心=${h.distance}m`
-            )
+            .map((h: any, idx: number) => {
+              const sText = snippetById.get(String(h.id)) || '未检索到公开网页挂牌数字';
+              return `${idx + 1}. id="${h.id}" | 店名="${h.name}" | 类型="${h.categoryLabel}" | 地址="${h.address}"\n   └─ 网页检索实证：${sText}`;
+            })
             .join('\n');
 
-          const prompt = `请为「${cleanCity} ${centerName}」周边的以下 ${targetSlice.length} 家酒店/宾馆检索并核定入住日期（${checkIn} 至 ${checkOut}）的每晚人民币起步价与主力房型价格，供界面直接展示。
+          const prompt = `请为「${cleanCity} ${centerName}」周边的以下 ${targetSlice.length} 家酒店核定入住日期（${checkIn} 至 ${checkOut}）的每晚人民币价格与客房情况。
 
 【同区域已确认真实房价参照】：
 ${knownRefText}
 
-【全网实时检索到的国内携程/美团/同程/抖音公开网页摘要】：
-${mergedSnippets || '（当前区域个体门店公开网页较少，请结合门店品牌档次、地理位置与同区域真实参照价给出贴合中国本地实际行情的价格）'}
-
-【待定价酒店清单】：
+【待核价酒店及各自网页检索实证】：
 ${hotelListText}
 
-请严格返回一个 JSON 数组，包含每一家店的客房与房态明细对象（不要遗漏任何 id），格式如下：
+请严格返回一个 JSON 数组（不要遗漏任何 id），格式如下：
 [
   {
     "id": "原样返回酒店id",
-    "minPrice": 89,
-    "priceRange": "¥79-129",
-    "vacancyHint": "今日有空房",
-    "basis": "全网检索挂牌",
+    "minPrice": 95,
+    "priceRange": "¥85-125",
+    "vacancyHint": "有房",
+    "basis": "公开挂牌实价",
     "rooms": [
-      { "name": "特惠大床房", "spec": "1.5m床·有窗·独卫", "status": "有空房", "leftText": "可订", "price": 89 },
-      { "name": "标准双床房", "spec": "1.2m×2床·有窗", "status": "有空房", "leftText": "可订", "price": 109 },
-      { "name": "精选商务大床房", "spec": "1.8m床·24㎡", "status": "房量紧俏", "leftText": "剩3间", "price": 129 }
+      { "name": "标准大床房", "spec": "独立卫浴", "status": "有房", "leftText": "可订", "price": 95 },
+      { "name": "标准双床房", "spec": "双人入住", "status": "有房", "leftText": "可订", "price": 115 }
     ]
   }
 ]
-要求：
-1. minPrice 和 rooms[].price 必须是贴合实际的纯整数（人民币元），每家店返回 3 个主力房型；村镇/高校门口个体小宾馆通常在 65~135 元，经济连锁在 129~229 元，中高端在 259~459 元；若网页摘要有明确价格优先采用网页实价。
-2. 只输出纯 JSON 数组！`;
+严格准确性要求：
+1. 若某店的「网页检索实证」中出现了明确的人民币房价数字（如 ¥98、118元起），必须严格采用该真实数字，并将 basis 设为 "公开网页实价"！
+2. 若某店是未上网公开挂价的村镇/校门口个体小旅馆（「网页检索实证」无明确数字），请结合同街区真实参照价审慎估算，且必须诚实地将 basis 设为 "周边行情估算(美团私域价请扫码核实)"，禁止伪装成实价！
+3. 只输出纯 JSON 数组！`;
 
           console.log(`[ai-batch-prices] querying ${targetSlice.length} hotels near "${centerName}" via model=${llm.model}`);
           const rawReply = await callOpenAiCompatibleLlm(llm, prompt, 3500);
@@ -733,6 +727,31 @@ ${snippetContext || '暂无直接网页正文，请结合该门店品牌/地段�
         }
         res.statusCode = 200;
         res.end(JSON.stringify(lanMemorySyncState));
+      });
+
+      // 8. 精准同店扫码桥接存储：按唯一门店 ID 保存完整地址坐标，保证手机扫码 100% 命中同一家店绝不跳错分店
+      server.middlewares.use('/api/hotel-target', async (req, res) => {
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        if (req.method === 'POST') {
+          try {
+            const hotel = await readJsonBody(req);
+            if (hotel?.id) {
+              lanHotelTargets.set(String(hotel.id), hotel);
+            }
+            res.statusCode = 200;
+            res.end(JSON.stringify({ ok: true }));
+          } catch {
+            res.statusCode = 400;
+            res.end(JSON.stringify({ ok: false }));
+          }
+          return;
+        }
+
+        const reqUrl = new URL(req.url || '', 'http://localhost');
+        const id = reqUrl.searchParams.get('id') || '';
+        const found = lanHotelTargets.get(id) || null;
+        res.statusCode = found ? 200 : 404;
+        res.end(JSON.stringify({ hotel: found }));
       });
     },
   };

@@ -76,11 +76,13 @@ export const HotelCard: React.FC<Props> = ({
     hotel.priceSource === 'live_ota'
       ? '⚡ 在线实时库存'
       : hotel.priceSource === 'ai_search'
-      ? `🤖 AI全网实查${hotel.vacancySummary ? ` · ${hotel.vacancySummary}` : ''}`
+      ? hotel.aiBasis && hotel.aiBasis.includes('实价')
+        ? '🤖 公开网页挂牌实价'
+        : '🤖 周边行情估算(美团券后价请点购买看)'
       : hotel.priceSource === 'amap_cost'
-      ? '✓ 高德收录房型'
+      ? '✓ 高德官方实价'
       : aiLoading
-      ? '正在同步实时房态...'
+      ? '正在检索公开挂牌价...'
       : '门店主力房型参考';
 
   return (

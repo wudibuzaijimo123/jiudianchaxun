@@ -646,7 +646,7 @@ async function fetchAmapNearbyPois(
   if (!cleanKey) return { hotels: [] };
 
   try {
-    // 优先使用高德 POI 2.0 (v5)，显式请求 show_fields=business,cost,photos 召回酒店间夜价格
+    // 同时并行请求高德 POI 2.0 (v5) 与 POI 1.0 (v3 extensions=all)，融合两边官方收录的 lowest_price 与 cost 实价！
     const fetchV5Page = async (pageNum: number) => {
       const url = `https://restapi.amap.com/v5/place/around?key=${encodeURIComponent(
         cleanKey
@@ -655,7 +655,31 @@ async function fetchAmapNearbyPois(
       return r.json();
     };
 
-    const p1 = await fetchV5Page(1);
+    const fetchV3Page = async (pageNum: number) => {
+      const url = `https://restapi.amap.com/v3/place/around?key=${encodeURIComponent(
+        cleanKey
+      )}&location=${center.lng},${center.lat}&types=100000&radius=${radiusMeters}&offset=25&page=${pageNum}&sortrule=distance&extensions=all`;
+      const r = await fetch(url);
+      return r.json();
+    };
+
+    const [p1, v3p1] = await Promise.all([
+      fetchV5Page(1),
+      fetchV3Page(1).catch(() => null),
+    ]);
+
+    // 提取 v3 中可能独有的官方最低房价 (lowest_price / cost) 映射表
+    const v3PriceMap = new Map<string, number>();
+    if (v3p1?.status === '1' && Array.isArray(v3p1.pois)) {
+      for (const vp of v3p1.pois) {
+        const vid = asStr(vp.id);
+        const vPriceStr = asStr(vp.biz_ext?.lowest_price) || asStr(vp.biz_ext?.cost);
+        const vNum = parseFloat(vPriceStr);
+        if (vid && Number.isFinite(vNum) && vNum >= 15) {
+          v3PriceMap.set(vid, Math.round(vNum));
+        }
+      }
+    }
     if (p1.status === '1' && Array.isArray(p1.pois)) {
       let allPois = [...p1.pois];
       if (p1.pois.length === 25) {
@@ -692,10 +716,16 @@ async function fetchAmapNearbyPois(
               ? Number(ratingNum.toFixed(1))
               : null;
 
-          // 读取高德 POI 2.0 的酒店间夜均价字段 (business.cost 或顶层 cost)
+          // 融合高德 v5 (business.cost) 与 v3 (biz_ext.lowest_price) 的真实挂牌底价
+          const poiId = asStr(poi.id) || `amap5-${idx}`;
           const costRaw = asStr(biz.cost) || asStr(poi.cost?.cost) || asStr(poi.cost);
           const costNum = parseFloat(costRaw);
-          const hasAmapCost = Number.isFinite(costNum) && costNum >= 15;
+          const v3Price = v3PriceMap.get(poiId);
+          const officialPrice =
+            Number.isFinite(costNum) && costNum >= 15
+              ? Math.round(costNum)
+              : v3Price ?? null;
+          const hasAmapCost = officialPrice !== null;
 
           const telStr = asStr(biz.tel) || asStr(poi.tel);
           const phones = telStr
@@ -718,7 +748,7 @@ async function fetchAmapNearbyPois(
           const rectag = asStr(biz.rectag) || asStr(biz.keytag);
 
           return {
-            id: asStr(poi.id) || `amap5-${idx}`,
+            id: poiId,
             name,
             city,
             district,
@@ -730,13 +760,13 @@ async function fetchAmapNearbyPois(
             category: cls.category,
             categoryLabel: cls.label,
             rating,
-            minPrice: hasAmapCost ? Math.round(costNum) : null,
+            minPrice: officialPrice,
             priceSource: hasAmapCost ? ('amap_cost' as const) : ('none' as const),
             availability: 'unknown' as const,
             phones,
             photos: photos.length > 0 ? photos : FALLBACK_HOTEL_PHOTOS[cls.category],
             tags: extractTags(name, rawType, businessArea, rectag, distance),
-            roomHints: buildRoomHints(cls.category, hasAmapCost ? Math.round(costNum) : null),
+            roomHints: buildRoomHints(cls.category, officialPrice),
             source: 'amap' as const,
           };
         });

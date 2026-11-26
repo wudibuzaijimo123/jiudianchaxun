@@ -34,7 +34,12 @@ import {
   SearchHistoryItem,
 } from './types/hotel';
 import { wgs84ToGcj02 } from './utils/coordTransform';
-import { isMobileDevice, smartLaunchPlatform } from './utils/deepLinks';
+import {
+  buildExactStoreQuery,
+  buildPlatformLinks,
+  isMobileDevice,
+  smartLaunchPlatform,
+} from './utils/deepLinks';
 import {
   addSearchHistory,
   clearSearchHistory,
@@ -117,11 +122,27 @@ export const App: React.FC = () => {
     return () => clearTimeout(t);
   }, [toastMsg]);
 
-  // 1. 手机扫码 ?gomt=xxx 桥接直拉美团App；2. 手机局域网首次打开自动从电脑内存同步全部 Key
+  // 1. 手机扫码 ?buyId=xxx 精准锁定同一物理门店唤醒美团App；2. 手机局域网首次打开自动从电脑同步全部 Key
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
+    const buyId = searchParams.get('buyId');
     const gomt = searchParams.get('gomt');
-    if (gomt) {
+
+    if (buyId) {
+      window.history.replaceState(null, '', window.location.pathname);
+      fetch(`/api/hotel-target?id=${encodeURIComponent(buyId)}`)
+        .then((r) => r.json())
+        .then((d) => {
+          if (d?.hotel) {
+            const h: HotelItem = d.hotel;
+            setDetailHotel(h);
+            const links = buildPlatformLinks(h);
+            showToast(`已锁定同店：${buildExactStoreQuery(h)}`);
+            window.location.href = links.meituanApp;
+          }
+        })
+        .catch(() => {});
+    } else if (gomt) {
       window.history.replaceState(null, '', window.location.pathname);
       window.location.href = `imeituan://www.meituan.com/search?q=${encodeURIComponent(gomt)}`;
     }
