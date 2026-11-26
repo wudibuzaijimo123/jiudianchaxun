@@ -1,6 +1,6 @@
 {
-  "name": "附近查一查 · 酒店租房招聘雷达",
-  "short_name": "附近查一查",
+  "name": "查询工具 · 酒店租房招聘",
+  "short_name": "查询工具",
   "description": "输入任意地点，查周边酒店房价与空房、租房房源与租金、附近在招岗位，一键跳转美团、携程、安居客、BOSS直聘与高德地图",
   "start_url": "/",
   "display": "standalone",

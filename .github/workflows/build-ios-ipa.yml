@@ -88,7 +88,7 @@ jobs:
               || /usr/libexec/PlistBuddy -c "Set :$1 $2" "$PLIST"
           }
           set_kv NSLocationWhenInUseUsageDescription "用于获取你当前位置，检索周边酒店、宾馆与租房房源"
-          set_kv CFBundleDisplayName "附近查一查"
+          set_kv CFBundleDisplayName "查询工具"
 
           # 允许查询这些 App 是否安装（跳转美团/抖音/高德/携程用）
           /usr/libexec/PlistBuddy -c "Delete :LSApplicationQueriesSchemes" "$PLIST" 2>/dev/null || true
