@@ -216,12 +216,18 @@ function backendProxyPlugin(): Plugin {
           }
         }
 
+        const addrInfo = server.httpServer?.address();
+        const actualPort =
+          addrInfo && typeof addrInfo === 'object' && addrInfo.port
+            ? addrInfo.port
+            : server.config.server.port || 5173;
+
         candidates.sort((a, b) => b.score - a.score);
         res.setHeader('Content-Type', 'application/json; charset=utf-8');
         res.end(
           JSON.stringify({
             ips: candidates.map((c) => c.ip),
-            port: server.config.server.port || 5173,
+            port: actualPort,
           })
         );
       });
@@ -715,5 +721,6 @@ export default defineConfig({
   server: {
     host: '0.0.0.0',
     port: 5173,
+    strictPort: true,
   },
 });

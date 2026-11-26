@@ -80,7 +80,9 @@ export const SettingsAndGuideModal: React.FC<Props> = ({
 
   const [lanIps, setLanIps] = useState<string[]>([]);
   const [selectedIp, setSelectedIp] = useState<string>('');
-  const [port, setPort] = useState<number>(5173);
+  const [port, setPort] = useState<number>(
+    Number(window.location.port) || 5173
+  );
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
 
   useEffect(() => {
