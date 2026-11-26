@@ -228,7 +228,14 @@ export const JobPanel: React.FC<Props> = ({
 
       // BOSS直聘、智联或手机端：原生 IPA 内立即触发跳转，不让剪贴板异步阻塞手势
       const appSchemes: Record<string, string[]> = {
-        boss: [links.bossApp, links.bossAppAlt],
+        // BOSS 官方 openwith 深链能直接落到 App 内的岗位页，失败再退首页 scheme
+        boss: [
+          `bosszp://bosszhipin.app/openwith?type=newwebview&fullScreen=1&url=${encodeURIComponent(
+            links.boss
+          )}`,
+          links.bossApp,
+          links.bossAppAlt,
+        ],
         wuba: [links.wubaApp],
         zhaopin: [links.zhaopinApp],
         amap: [],
@@ -237,20 +244,21 @@ export const JobPanel: React.FC<Props> = ({
         platform === 'boss' ? 'BOSS直聘' : platform === 'wuba' ? '58同城' : '智联招聘';
       const tab = reserveTab();
       const copyPromise = copyTextSilently(keyword);
-      // 先试 App 自己的 scheme（真机上能直接进 App），没装才退浏览器
-      const result = await openAppFirst(appSchemes[platform] || [], links[platform], tab);
+      // 先试 App 自己的 scheme（插件 + WebView 导航双保险），没装才退浏览器
+      const jump = await openAppFirst(appSchemes[platform] || [], links[platform], tab);
       const copied = await Promise.race([copyPromise, new Promise<boolean>((r) => setTimeout(() => r(false), 120))]);
-      if (result === 'fail') {
+      if (jump.result === 'fail') {
         onToast(`跳转受阻，已复制「${keyword}」，可前往招聘平台粘贴搜`);
         return;
       }
-      if (result === 'app') {
+      if (jump.result === 'app') {
         onToast(`已跳转到${platformName} App${copied ? `，搜索词「${keyword}」已复制` : ''}`);
         return;
       }
+
       // 走到这里说明手机上没装对应 App，只能看网页版
       onToast(
-        `未检测到${platformName} App，已用浏览器打开网页版${
+        `未检测到${platformName} App（已试 ${jump.tried.join(' / ') || '无'}），已用浏览器打开网页版${
           copied ? `，搜索词「${keyword}」已复制` : ''
         }`
       );

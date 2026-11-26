@@ -106,32 +106,94 @@ export async function openExternalUrl(url: string, reserved?: Window | null): Pr
 export type OpenResult = 'app' | 'web' | 'fail';
 
 /**
+ * 用 WebView 导航的方式尝试唤起 App（不依赖任何 Capacitor 插件）。
+ *
+ * 原理：WKWebView 收到非 http(s) 协议会交给系统处理，系统能打开就切到 App。
+ * 页面切走后 visibilitychange / blur / pagehide 会立刻触发，据此判断成功；
+ * 超时仍未切走就认为没装这个 App。
+ */
+function trySchemeByNavigation(scheme: string, timeoutMs = 1200): Promise<boolean> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const cleanup = () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('blur', onLeave);
+      window.removeEventListener('pagehide', onLeave);
+    };
+    const onLeave = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(true);
+    };
+    const onVisible = () => {
+      if (document.visibilityState === 'hidden') onLeave();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('blur', onLeave);
+    window.addEventListener('pagehide', onLeave);
+
+    try {
+      window.location.href = scheme;
+    } catch {
+      // 等超时即可
+    }
+
+    window.setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(false);
+    }, timeoutMs);
+  });
+}
+
+/** 是否手机浏览器（PWA 场景下也值得试一次 scheme，桌面浏览器不试，避免 1.2s 白等） */
+function isMobileUA(): boolean {
+  return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+}
+
+/**
  * 优先用平台自己的 URL Scheme 拉起原生 App，没装再退回网页。
  *
- * 写法与酒店模块的「美团 / 高德」保持一致：不做 canOpenUrl 预检，直接
- * AppLauncher.openUrl（等价于原生 UIApplication.open），返回 completed=false
- * 才认为该 App 没装、换下一个。canOpenUrl 在 scheme 未登记时会恒为 false，
- * 拿它当开关反而会把本来能跳的 App 挡掉。
+ * 三条路依次尝试。酒店模块只覆盖了第 1、3 条，而 58/BOSS 这类没有「callnative」
+ * 唤起页的平台必须补第 2 条，否则在某些 IPA 里点了只会开浏览器：
+ *   1. Capacitor AppLauncher 插件（原生 UIApplication.open，美团就是这么跳的）
+ *   2. WebView 导航到 scheme（完全不依赖插件，插件没打进包也能唤起 App）
+ *   3. 网页兜底
  */
 export async function openAppFirst(
   schemes: string[],
   webFallback: string,
   reserved?: Window | null
-): Promise<OpenResult> {
+): Promise<{ result: OpenResult; scheme: string; tried: string[] }> {
+  const list = schemes.map((s) => normalizeExternalUrl(s)).filter(Boolean);
+  const tried: string[] = [];
+
   if (isNativePackagedApp()) {
-    for (const raw of schemes) {
-      const scheme = normalizeExternalUrl(raw);
-      if (!scheme) continue;
+    // 1) 插件直开
+    for (const scheme of list) {
+      tried.push(scheme.split('?')[0]);
       try {
         const res = await AppLauncher.openUrl({ url: scheme });
-        if (res?.completed !== false) return 'app';
+        if (res?.completed !== false) return { result: 'app', scheme, tried };
       } catch {
-        // 这个 scheme 打不开，试下一个
+        // 插件不可用 / scheme 打不开，走第 2 条
       }
     }
   }
+
+  // 2) WebView 导航唤端（插件失效时的兜底；手机浏览器里同样有效）
+  if (isNativePackagedApp() || isMobileUA()) {
+    for (const scheme of list) {
+      tried.push(scheme.split('?')[0]);
+      const ok = await trySchemeByNavigation(scheme);
+      if (ok) return { result: 'app', scheme, tried };
+    }
+  }
+
   const opened = await openExternalUrl(webFallback, reserved);
-  return opened ? 'web' : 'fail';
+  return { result: opened ? 'web' : 'fail', scheme: '', tried };
 }
 
 /** 唤起美团/抖音这类「有则打开 App，没有就退化为网页」的场景 */
