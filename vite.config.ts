@@ -12,6 +12,9 @@ interface CacheEntry {
 const apiCache = new Map<string, CacheEntry>();
 const CACHE_TTL_MS = 25 * 60 * 1000;
 
+// 仅保存在当前运行进程内存中的局域网手机同步配置（绝不写入磁盘或仓库，供同一Wi-Fi手机免输Key同步）
+let lanMemorySyncState: Record<string, any> = {};
+
 function getCached(key: string): CacheEntry | null {
   const hit = apiCache.get(key);
   if (!hit) return null;
@@ -711,6 +714,25 @@ ${snippetContext || '暂无直接网页正文，请结合该门店品牌/地段�
           res.setHeader('Content-Type', 'application/json; charset=utf-8');
           res.end(JSON.stringify({ url: 'https://hotel.meituan.com/', matched: false }));
         }
+      });
+
+      // 7. 局域网手机免长URL配置同步接口（解决超长二维码扫不出问题）
+      server.middlewares.use('/api/sync-config', async (req, res) => {
+        res.setHeader('Content-Type', 'application/json; charset=utf-8');
+        if (req.method === 'POST') {
+          try {
+            const body = await readJsonBody(req);
+            lanMemorySyncState = { ...lanMemorySyncState, ...body, updatedAt: Date.now() };
+            res.statusCode = 200;
+            res.end(JSON.stringify({ ok: true }));
+          } catch {
+            res.statusCode = 400;
+            res.end(JSON.stringify({ ok: false }));
+          }
+          return;
+        }
+        res.statusCode = 200;
+        res.end(JSON.stringify(lanMemorySyncState));
       });
     },
   };

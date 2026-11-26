@@ -52,6 +52,7 @@ interface Props {
   onClose: () => void;
   onToggleFavorite: (hotel: HotelItem, e: React.MouseEvent) => void;
   onOpenSettings: () => void;
+  onOpenMeituanBuy: (hotel: HotelItem) => void;
   onToast: (msg: string) => void;
 }
 
@@ -65,6 +66,7 @@ export const HotelDetailSheet: React.FC<Props> = ({
   onClose,
   onToggleFavorite,
   onOpenSettings,
+  onOpenMeituanBuy,
   onToast,
 }) => {
   const [activePhotoIdx, setActivePhotoIdx] = useState(0);
@@ -317,30 +319,30 @@ export const HotelDetailSheet: React.FC<Props> = ({
             </div>
           </div>
 
-          {/* ========== 一键直达美团购买主横幅（支持电脑直跳门店页 + 美团App扫码即买） ========== */}
+          {/* ========== 一键购买预订主横幅 ========== */}
           <div className="meituan-buy-banner">
             <div className="mt-buy-left">
               <button
                 type="button"
                 className="mt-buy-primary-btn"
-                onClick={() => launchMeituanPurchase(hotel, serpApiKey, onToast)}
+                onClick={() => {
+                  if (mobile) {
+                    launchMeituanPurchase(hotel, serpApiKey, onToast);
+                  } else {
+                    onOpenMeituanBuy(hotel);
+                  }
+                }}
               >
                 <ShoppingBag size={16} />
-                <span>直达美团购买 / 订房</span>
+                <span>{mobile ? '唤醒美团 App 购买' : '立即购买 / 预订该酒店'}</span>
                 <ExternalLink size={14} />
               </button>
               <span className="mt-buy-sub">
                 {mobile
                   ? '点击直接唤醒手机美团 App 进入该酒店预订下单页'
-                  : '点击自动定位该酒店美团网页购买页（或用手机美团 App 扫右侧码领神券购买）'}
+                  : '电脑支持直达携程/同程在线付款，或手机美团 App 领券下单'}
               </span>
             </div>
-            {!mobile && meituanQr && (
-              <div className="mt-qr-mini">
-                <img src={meituanQr} alt="美团App扫码购买" />
-                <span>美团App扫码购</span>
-              </div>
-            )}
           </div>
 
           <div className="info-box">
@@ -503,9 +505,15 @@ export const HotelDetailSheet: React.FC<Props> = ({
                         <button
                           type="button"
                           className="mini-mt-buy"
-                          onClick={() => launchMeituanPurchase(hotel, serpApiKey, onToast)}
+                          onClick={() => {
+                            if (mobile) {
+                              launchMeituanPurchase(hotel, serpApiKey, onToast);
+                            } else {
+                              onOpenMeituanBuy(hotel);
+                            }
+                          }}
                         >
-                          美团购
+                          立即购
                         </button>
                       </div>
                     </div>

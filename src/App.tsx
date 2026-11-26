@@ -17,6 +17,7 @@ import {
 import { HotelCard } from './components/HotelCard';
 import { HotelDetailSheet } from './components/HotelDetailSheet';
 import { HotelMapView } from './components/HotelMapView';
+import { MeituanBuyModal } from './components/MeituanBuyModal';
 import { SearchAndFilterBar } from './components/SearchAndFilterBar';
 import { SettingsAndGuideModal } from './components/SettingsAndGuideModal';
 import {
@@ -33,7 +34,7 @@ import {
   SearchHistoryItem,
 } from './types/hotel';
 import { wgs84ToGcj02 } from './utils/coordTransform';
-import { smartLaunchPlatform } from './utils/deepLinks';
+import { isMobileDevice, smartLaunchPlatform } from './utils/deepLinks';
 import {
   addSearchHistory,
   clearSearchHistory,
@@ -96,6 +97,7 @@ export const App: React.FC = () => {
   const [mobileView, setMobileView] = useState<MobileViewMode>('list');
   const [selectedHotel, setSelectedHotel] = useState<HotelItem | null>(null);
   const [detailHotel, setDetailHotel] = useState<HotelItem | null>(null);
+  const [buyModalHotel, setBuyModalHotel] = useState<HotelItem | null>(null);
   const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
 
   const [favorites, setFavorites] = useState<HotelItem[]>(() => loadFavorites());
@@ -115,37 +117,50 @@ export const App: React.FC = () => {
     return () => clearTimeout(t);
   }, [toastMsg]);
 
-  // 监听手机扫码同步的 URL Hash (#syncKey=...&syncSerp=...&name=...&lng=...&lat=...)
+  // 1. 手机扫码 ?gomt=xxx 桥接直拉美团App；2. 手机局域网首次打开自动从电脑内存同步全部 Key
   useEffect(() => {
-    const hash = window.location.hash.replace(/^#/, '');
-    if (!hash) return;
-    const params = new URLSearchParams(hash);
-    const syncedKey = params.get('syncKey');
-    const syncedSerp = params.get('syncSerp');
-    const syncedName = params.get('name');
-    const syncedLng = Number(params.get('lng'));
-    const syncedLat = Number(params.get('lat'));
-    const syncedCity = params.get('city') || '';
+    const searchParams = new URLSearchParams(window.location.search);
+    const gomt = searchParams.get('gomt');
+    if (gomt) {
+      window.history.replaceState(null, '', window.location.pathname);
+      window.location.href = `imeituan://www.meituan.com/search?q=${encodeURIComponent(gomt)}`;
+    }
 
-    if (syncedKey) {
-      saveAmapKey(syncedKey);
-      setAmapKey(syncedKey);
+    if (window.location.hostname !== 'localhost' && !loadAmapKey()) {
+      fetch('/api/sync-config')
+        .then((r) => r.json())
+        .then((cfg) => {
+          if (cfg?.amapKey) {
+            saveAmapKey(cfg.amapKey);
+            setAmapKey(cfg.amapKey);
+          }
+          if (cfg?.serpApiKey) {
+            saveSerpApiKey(cfg.serpApiKey);
+            setSerpApiKey(cfg.serpApiKey);
+          }
+          if (cfg?.llmConfig?.apiKey) {
+            saveLlmConfig(cfg.llmConfig);
+            setLlmConfig(cfg.llmConfig);
+          }
+          if (cfg?.center?.lng && cfg?.center?.lat) {
+            setCenter(cfg.center);
+            saveLastCenter(cfg.center);
+          }
+        })
+        .catch(() => {});
+    } else if (window.location.hostname === 'localhost') {
+      // 电脑端启动时将本机已存配置同步进内存供手机随时扫码拉取
+      fetch('/api/sync-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amapKey: loadAmapKey(),
+          serpApiKey: loadSerpApiKey(),
+          llmConfig: loadLlmConfig(),
+          center: loadLastCenter(),
+        }),
+      }).catch(() => {});
     }
-    if (syncedSerp) {
-      saveSerpApiKey(syncedSerp);
-      setSerpApiKey(syncedSerp);
-    }
-    if (syncedName && Number.isFinite(syncedLng) && Number.isFinite(syncedLat)) {
-      const nextC: SearchCenter = {
-        name: syncedName,
-        city: syncedCity,
-        lng: syncedLng,
-        lat: syncedLat,
-      };
-      setCenter(nextC);
-      saveLastCenter(nextC);
-    }
-    window.history.replaceState(null, '', window.location.pathname);
   }, []);
 
   // AI 并发分批全网检索周边酒店客房与房价情况（每批 5 家并发请求，3~5 秒极速刷上屏幕且绝不截断！）
@@ -615,7 +630,11 @@ export const App: React.FC = () => {
                     onToggleFavorite={handleToggleFavorite}
                     onQuickPlatformJump={(h, plat, e) => {
                       e.stopPropagation();
-                      smartLaunchPlatform(h, plat, showToast, serpApiKey);
+                      if (plat === 'meituan' && !isMobileDevice()) {
+                        setBuyModalHotel(h);
+                      } else {
+                        smartLaunchPlatform(h, plat, showToast, serpApiKey);
+                      }
                     }}
                   />
                 ))
@@ -848,7 +867,13 @@ export const App: React.FC = () => {
         onClose={() => setDetailHotel(null)}
         onToggleFavorite={handleToggleFavorite}
         onOpenSettings={() => setSettingsOpen(true)}
+        onOpenMeituanBuy={(h) => setBuyModalHotel(h)}
         onToast={showToast}
+      />
+
+      <MeituanBuyModal
+        hotel={buyModalHotel}
+        onClose={() => setBuyModalHotel(null)}
       />
 
       <SettingsAndGuideModal

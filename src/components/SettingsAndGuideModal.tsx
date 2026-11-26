@@ -117,23 +117,31 @@ export const SettingsAndGuideModal: React.FC<Props> = ({
       setQrDataUrl('');
       return;
     }
-    const params = new URLSearchParams();
-    if (inputAmap.trim()) params.set('syncKey', inputAmap.trim());
-    if (inputSerp.trim()) params.set('syncSerp', inputSerp.trim());
-    params.set('name', center.name);
-    params.set('city', center.city || '');
-    params.set('lng', String(center.lng));
-    params.set('lat', String(center.lat));
+    // 将当前电脑端配置同步到本机局域网服务内存中，二维码仅编码 26 字符极简短网址，秒扫秒开！
+    fetch('/api/sync-config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        amapKey: inputAmap.trim(),
+        serpApiKey: inputSerp.trim(),
+        llmConfig: {
+          apiKey: llmKey.trim(),
+          baseUrl: llmBase.trim() || 'https://api.deepseek.com/v1',
+          model: llmModel.trim() || 'deepseek-chat',
+        },
+        center,
+      }),
+    }).catch(() => {});
 
-    const mobileUrl = `http://${selectedIp}:${port}/#${params.toString()}`;
+    const mobileUrl = `http://${selectedIp}:${port}/`;
     QRCode.toDataURL(mobileUrl, {
-      width: 170,
+      width: 180,
       margin: 1,
       color: { dark: '#0f172a', light: '#ffffff' },
     })
       .then(setQrDataUrl)
       .catch(() => setQrDataUrl(''));
-  }, [open, selectedIp, port, inputAmap, inputSerp, center]);
+  }, [open, selectedIp, port, inputAmap, inputSerp, llmKey, llmBase, llmModel, center]);
 
   if (!open) return null;
 
@@ -445,7 +453,10 @@ export const SettingsAndGuideModal: React.FC<Props> = ({
                 <h4>
                   <QrCode size={15} /> 手机扫码同步（免重复填 Key）
                 </h4>
-                <p>手机连同一 Wi-Fi 扫码即可同步打开，添加到主屏幕当独立 App 使用：</p>
+                <p>
+                  1. 请用<strong>手机系统相机或浏览器</strong>扫码（勿用微信扫一扫）；<br />
+                  2. <strong>重要防坑：</strong>你电脑开着 <code>Mihomo/Clash</code> 的 <strong>TUN 虚拟网卡模式</strong>时，TUN 会拦截手机连入电脑局域网导致打不开！在代理软件里<strong>关掉 TUN 模式（仅保留系统代理）</strong>手机即可秒开！
+                </p>
                 {lanIps.length > 1 && (
                   <div className="ip-selector">
                     {lanIps.slice(0, 3).map((ip) => (
