@@ -248,10 +248,11 @@ export const JobPanel: React.FC<Props> = ({
         onToast(`已跳转到${platformName} App${copied ? `，搜索词「${keyword}」已复制` : ''}`);
         return;
       }
+      // 走到这里说明手机上没装对应 App，只能看网页版
       onToast(
-        copied
-          ? `已复制精准词「${keyword}」，正在跳转到对应招聘页`
-          : `正在跳转到对应招聘页（建议搜：${keyword}）`
+        `未检测到${platformName} App，已用浏览器打开网页版${
+          copied ? `，搜索词「${keyword}」已复制` : ''
+        }`
       );
     },
     [center, onToast]

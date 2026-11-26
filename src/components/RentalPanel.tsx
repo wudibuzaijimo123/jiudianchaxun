@@ -270,17 +270,12 @@ export const RentalPanel: React.FC<Props> = ({
         return;
       }
 
-      if (platform === 'anjuke') {
-        onToast(
-          copied
-            ? `已打开安居客（锁定${center.city.replace(/市$/, '')}·${listing.community}），词已复制`
-            : `正在打开安居客查看「${listing.community}」`
-        );
-      } else if (platform === 'wuba') {
-        onToast(copied ? `已复制「${keyword}」，正在打开 58 同城` : `正在打开 58 同城`);
-      } else if (platform === 'beike') {
-        onToast(`正在打开贝壳找房（${center.city.replace(/市$/, '')}）`);
-      }
+      // 走到这里说明手机上没装对应 App，只能看网页版
+      onToast(
+        `未检测到${platformName} App，已用浏览器打开网页版${
+          copied ? `，搜索词「${keyword}」已复制` : ''
+        }`
+      );
     },
     [center, onToast]
   );

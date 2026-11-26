@@ -4,7 +4,7 @@ import { isNativePackagedApp } from '../services/standaloneClient';
 
 /** 需要在系统里唤起的第三方 App scheme 及拨号/邮件协议 */
 const CUSTOM_SCHEME =
-  /^(imeituan|snssdk1128|iosamap|androidamap|baidumap|ctrip|diditaxi|openanjuke|wbmain|lianjiabeike|bosszp|alipay|weixin|tel|mailto):/i;
+  /^(imeituan|snssdk1128|iosamap|androidamap|baidumap|ctrip|diditaxi|openanjuke|wbmain|lianjiabeike|bosszp|zhipin|zhaopin|job51|ke|alipay|weixin|tel|mailto):/i;
 
 export function isHttpUrl(url: string): boolean {
   return /^https?:\/\//i.test(url);
@@ -108,11 +108,10 @@ export type OpenResult = 'app' | 'web' | 'fail';
 /**
  * 优先用平台自己的 URL Scheme 拉起原生 App，没装再退回网页。
  *
- * 只给 https 链接的话，iOS 只会用 Safari 打开网页版——这就是「点了 58 同城 / BOSS直聘
- * 没跳进 App」的原因。真正的 App 唤起必须走 wbmain:// 、bosszp:// 这类自定义 scheme。
- *
- * 注意：iOS 的 canOpenUrl 只有在 Info.plist 的 LSApplicationQueriesSchemes 里
- * 登记过该 scheme 时才返回 true（仓库的工作流已经写好这份白名单）。
+ * 写法与酒店模块的「美团 / 高德」保持一致：不做 canOpenUrl 预检，直接
+ * AppLauncher.openUrl（等价于原生 UIApplication.open），返回 completed=false
+ * 才认为该 App 没装、换下一个。canOpenUrl 在 scheme 未登记时会恒为 false，
+ * 拿它当开关反而会把本来能跳的 App 挡掉。
  */
 export async function openAppFirst(
   schemes: string[],
@@ -124,12 +123,10 @@ export async function openAppFirst(
       const scheme = normalizeExternalUrl(raw);
       if (!scheme) continue;
       try {
-        const can = await AppLauncher.canOpenUrl({ url: scheme });
-        if (!can?.value) continue;
         const res = await AppLauncher.openUrl({ url: scheme });
         if (res?.completed !== false) return 'app';
       } catch {
-        // 这个 scheme 不可用，试下一个
+        // 这个 scheme 打不开，试下一个
       }
     }
   }
