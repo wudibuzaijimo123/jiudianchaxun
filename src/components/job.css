@@ -312,6 +312,7 @@
 
 .jb-card {
   flex-shrink: 0;
+  min-width: 0;
   background: #ffffff;
   border-radius: 14px;
   border: 1.5px solid transparent;
@@ -1178,13 +1179,16 @@
   }
 }
 
-/* 宽屏桌面优化：招聘岗位 2 列网格排布 */
-@media (min-width: 960px) {
+/* 宽屏桌面优化：招聘岗位双列网格排布（grid-auto-rows: max-content 防止卡片被压扁裁切） */
+@media (min-width: 980px) {
   .job-mode .jb-list {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(460px, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-rows: max-content;
     align-content: start;
+    align-items: start;
     gap: 12px;
+    overflow-x: hidden;
   }
 
   .job-mode .jb-loading,

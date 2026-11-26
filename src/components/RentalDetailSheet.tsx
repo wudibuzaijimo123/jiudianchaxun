@@ -149,6 +149,13 @@ export const RentalDetailSheet: React.FC<Props> = ({ listing, city, amapKey, onC
     { label: '最短租期', value: listing.minLease || '面议', icon: <Info size={13} /> },
   ];
 
+  const areaUrl = listing
+    ? buildRentalPlatformLinks(
+        { name: listing.community, address: listing.address, city, lng: listing.lng || 0, lat: listing.lat || 0 },
+        listing
+      ).anjukeArea
+    : '';
+
   return createPortal(
     <div className="rt-sheet-mask" onClick={onClose}>
       <div className="rt-sheet" onClick={(e) => e.stopPropagation()}>
@@ -353,22 +360,28 @@ export const RentalDetailSheet: React.FC<Props> = ({ listing, city, amapKey, onC
             type="button"
             className="rt-sheet-btn anjuke"
             onClick={() => onJump(listing, 'anjuke')}
+            title="搜索该小区在租房源"
           >
-            安居客找房
+            {listing.verifiedSource && listing.sourceUrl ? '直达原帖' : '搜该小区'}
           </button>
+          {areaUrl && (
+            <a
+              href={areaUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rt-sheet-btn ghost"
+              style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none' }}
+              title="若该小区当前无挂牌，点击看同区全部在租真实房源"
+            >
+              同区全量房源
+            </a>
+          )}
           <button
             type="button"
             className="rt-sheet-btn wuba"
             onClick={() => onJump(listing, 'wuba')}
           >
             58同城
-          </button>
-          <button
-            type="button"
-            className="rt-sheet-btn ghost"
-            onClick={() => onJump(listing, 'beike')}
-          >
-            贝壳
           </button>
           <button
             type="button"

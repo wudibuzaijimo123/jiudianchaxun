@@ -43,6 +43,9 @@ export interface RentalListing {
   /** 价格/信息依据说明 */
   basis?: string;
   riskNote?: string;
+  /** 若来自公开平台（安居客/58/贝壳）检索原文，记录直达原帖链接 */
+  sourceUrl?: string;
+  verifiedSource?: boolean;
   priceSource: RentalPriceSource;
 }
 

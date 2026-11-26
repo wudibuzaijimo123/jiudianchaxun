@@ -141,9 +141,9 @@ export const JobPanel: React.FC<Props> = ({
 
   useEffect(() => {
     void runSearch(false);
-    // 地点、高德 Key 或大模型配置变化时重新检索
+    // 地点、高德 Key、SerpApi 或大模型配置变化时重新检索
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [center.lng, center.lat, amapKey, llmConfig.apiKey, llmConfig.baseUrl, llmConfig.model, serverBaseUrl]);
+  }, [center.lng, center.lat, amapKey, serpApiKey, llmConfig.apiKey, llmConfig.baseUrl, llmConfig.model, serverBaseUrl]);
 
   // 地名联想
   useEffect(() => {
@@ -184,11 +184,14 @@ export const JobPanel: React.FC<Props> = ({
   const handleJump = useCallback(
     async (job: JobListing, platform: 'boss' | 'wuba' | 'zhaopin' | 'amap') => {
       if (platform === 'amap') {
-        onToast(`正在高德地图定位「${job.company}」`);
+        onToast(`正在打开高德地图路线规划「${job.company}」`);
         void openInAmap({
           name: job.company,
           address: job.address,
           city: center.city,
+          lng: job.lng,
+          lat: job.lat,
+          approx: job.geoApprox,
         });
         return;
       }
@@ -223,16 +226,20 @@ export const JobPanel: React.FC<Props> = ({
         return;
       }
 
-      // BOSS直聘、智联或手机端：直接携带区域+岗位关键词精准直达
+      // BOSS直聘、智联或手机端：原生 IPA 内立即触发跳转，不让剪贴板异步阻塞手势
       const tab = reserveTab();
-      const copied = await copyTextSilently(keyword);
+      const copyPromise = copyTextSilently(keyword);
+      const opened = await openExternalUrl(links[platform], tab);
+      const copied = await Promise.race([copyPromise, new Promise<boolean>((r) => setTimeout(() => r(false), 120))]);
+      if (!opened) {
+        onToast(`跳转受阻，已复制「${keyword}」，可前往招聘平台粘贴搜`);
+        return;
+      }
       onToast(
         copied
           ? `已复制精准词「${keyword}」，正在跳转到对应招聘页`
           : `正在跳转到对应招聘页（建议搜：${keyword}）`
       );
-
-      void openExternalUrl(links[platform], tab);
     },
     [center, onToast]
   );

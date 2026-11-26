@@ -9,7 +9,7 @@ import { extractJsonFromText, isNativePackagedApp, resolveApiUrl } from './stand
 import { calcDistanceMeters } from '../utils/coordTransform';
 import { anjukeCitySlug } from '../utils/citySlug';
 
-const CACHE_KEY = 'jdcx_rental_cache_v3';
+const CACHE_KEY = 'jdcx_rental_cache_v4';
 const CACHE_TTL = 30 * 60 * 1000;
 
 export interface GroundedCommunityPoi {
@@ -114,6 +114,10 @@ function normalizeListing(raw: any, idx: number, fallbackDistrict?: string): Ren
     photos: [],
     basis: String(raw.basis || '').trim() || undefined,
     riskNote: String(raw.riskNote || '').trim() || undefined,
+    sourceUrl: /^https?:\/\//i.test(String(raw.sourceUrl || ''))
+      ? String(raw.sourceUrl).trim()
+      : undefined,
+    verifiedSource: Boolean(raw.verifiedSource && /^https?:\/\//i.test(String(raw.sourceUrl || ''))),
     priceSource: 'ai_search',
   };
 }
@@ -602,7 +606,7 @@ export async function searchRentals(options: RentalQueryOptions): Promise<Rental
     maxRent = null,
     force,
   } = options;
-  const cacheKey = `${center.city}|${center.name}|${radius}|${maxRent ?? ''}|${amapKey ? 'amap' : 'no'}`;
+  const cacheKey = `${center.city}|${center.name}|${radius}|${maxRent ?? ''}|${amapKey ? 'amap' : 'no'}|${serpApiKey ? 's' : 'n'}`;
 
   if (!force) {
     const cached = readCache(cacheKey);
@@ -745,16 +749,32 @@ export function buildRentalPlatformLinks(center: SearchCenter, listing?: RentalL
   const cleanCity = String(center.city || '').replace(/市$/, '');
   const slug = anjukeCitySlug(center.city);
   const kw = listing ? listing.community.trim() : center.name.trim();
+  const districtShort = String(listing?.district || '')
+    .replace(/(区|县|周边)$/, '')
+    .trim();
   const fullKw = listing ? `${cleanCity} ${listing.community}`.trim() : `${cleanCity} ${center.name}`.trim();
   const encodedKw = encodeURIComponent(kw);
   const encodedFull = encodeURIComponent(fullKw);
+  const encodedDist = encodeURIComponent(districtShort || cleanCity);
   const addr = listing ? `${cleanCity} ${listing.address}` : `${cleanCity} ${center.name}`;
+  const defaultAnjuke = buildAnjukeMobileUrl(center.city, listing);
 
   return {
-    anjuke: buildAnjukeMobileUrl(center.city, listing),
-    wuba: `https://m.58.com/${slug ? `${slug}/` : ''}chuzu/?key=${encodedKw}`,
+    anjuke: listing?.sourceUrl && /anjuke\.com/i.test(listing.sourceUrl) ? listing.sourceUrl : defaultAnjuke,
+    anjukeArea: slug
+      ? `https://${slug}.zu.anjuke.com/fangyuan/?kw=${encodedDist}`
+      : 'https://zu.anjuke.com/fangyuan/',
+    wuba:
+      listing?.sourceUrl && /58\.com/i.test(listing.sourceUrl)
+        ? listing.sourceUrl
+        : `https://m.58.com/${slug ? `${slug}/` : ''}chuzu/?key=${encodedKw}`,
     wubaPc: `https://${slug ? `${slug}.` : 'www.'}58.com/chuzu/?key=${encodedKw}`,
-    beike: slug ? `https://${slug}.zu.ke.com/zufang/` : `https://m.ke.com/cz/?keyword=${encodedFull}`,
+    beike:
+      listing?.sourceUrl && /ke\.com|lianjia\.com/i.test(listing.sourceUrl)
+        ? listing.sourceUrl
+        : slug
+        ? `https://${slug}.zu.ke.com/zufang/`
+        : `https://m.ke.com/cz/?keyword=${encodedFull}`,
     beikeMobile: slug ? `https://m.ke.com/chuzu/${slug}/zufang/` : `https://m.ke.com/cz/`,
     amap: `https://uri.amap.com/search?keyword=${encodeURIComponent(addr)}&city=${encodeURIComponent(
       cleanCity

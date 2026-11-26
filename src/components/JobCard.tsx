@@ -70,6 +70,11 @@ export const JobCard: React.FC<Props> = ({ job, onOpen, onJump }) => {
               <Building2 size={11} /> {job.company}
             </span>
             <span className={`jb-type-pill type-${job.type}`}>{job.type}</span>
+            {job.verifiedSource && (
+              <span className="jb-type-pill" style={{ background: '#dcfce7', color: '#15803d' }}>
+                公开真帖
+              </span>
+            )}
             {isDemo && <span className="jb-demo-pill">示例</span>}
           </div>
 

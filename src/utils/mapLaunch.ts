@@ -35,12 +35,12 @@ function searchKeyword(t: AmapTarget): string {
   return (parts.join(' ') || t.address || '').trim();
 }
 
-/** 高德网页版 URI：callnative=1 会在装了高德的手机上尝试唤起 App，没装就留在网页 */
+/** 高德网页版路线规划/定位 URI：有坐标走路线导航，无坐标走关键词检索（callnative=1 尝试唤起高德 App） */
 export function buildAmapWebUrl(t: AmapTarget): string {
   if (hasPreciseCoord(t)) {
     return (
-      `https://uri.amap.com/marker?position=${t.lng},${t.lat}` +
-      `&name=${encodeURIComponent(t.name)}&src=jiudianchaxun&coordinate=gaode&callnative=1`
+      `https://uri.amap.com/navigation?to=${t.lng},${t.lat},${encodeURIComponent(t.name)}` +
+      `&mode=car&policy=1&src=jiudianchaxun&coordinate=gaode&callnative=1`
     );
   }
   const kw = searchKeyword(t);
@@ -53,20 +53,18 @@ export function buildAmapWebUrl(t: AmapTarget): string {
 }
 
 /**
- * 高德 App 的 URL Scheme（仅原生壳内使用，需要 Info.plist 里声明 iosamap）。
- * 有精确坐标走 viewMap 直接标点，没有就用 poi 关键词搜索。
+ * 高德 App 的 URL Scheme（仅原生壳内使用，需 Info.plist 声明 iosamap）。
+ * 有精确坐标走 path 直接进入高德「路线规划」（支持驾车/公交/步行切换），无坐标走 poi 关键词搜索。
  */
 export function buildAmapAppUrl(t: AmapTarget): string {
   const scheme = isAndroid()
     ? 'androidamap://'
-    : isIOS()
-    ? 'iosamap://'
     : 'iosamap://';
 
   if (hasPreciseCoord(t)) {
     return (
-      `${scheme}viewMap?sourceApplication=jiudianchaxun` +
-      `&poiname=${encodeURIComponent(t.name)}&lat=${t.lat}&lon=${t.lng}&dev=0`
+      `${scheme}path?sourceApplication=jiudianchaxun` +
+      `&dlat=${t.lat}&dlon=${t.lng}&dname=${encodeURIComponent(t.name)}&dev=0&t=0`
     );
   }
 
@@ -79,10 +77,10 @@ export function buildAmapAppUrl(t: AmapTarget): string {
 }
 
 /**
- * 在高德地图里打开某个地点。
- * - 独立 IPA：先试 App scheme（WKWebView 里 window.open 无效，必须走原生），失败退回网页版；
+ * 在高德地图里打开某个地点 / 路线规划。
+ * - 独立 IPA：先试 iosamap://path（若未装高德或失败自动退回系统 Safari 打开 uri.amap.com/navigation）；
  * - 手机浏览器 / PWA：直接打开 uri.amap.com（带 callnative=1，装了高德会跳 App）；
- * - 桌面：新标签打开网页版。
+ * - 桌面：新标签打开路线页。
  */
 export async function openInAmap(t: AmapTarget): Promise<'app' | 'web'> {
   const webUrl = buildAmapWebUrl(t);

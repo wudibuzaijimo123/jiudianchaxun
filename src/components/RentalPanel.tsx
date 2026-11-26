@@ -149,9 +149,9 @@ export const RentalPanel: React.FC<Props> = ({
 
   useEffect(() => {
     void runSearch(false);
-    // 地点、高德 Key 或大模型配置变化时重新检索并锚定真实周边小区
+    // 地点、高德 Key、SerpApi 或大模型配置变化时重新检索并锚定真实房源
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [center.lng, center.lat, amapKey, llmConfig.apiKey, llmConfig.baseUrl, llmConfig.model, serverBaseUrl]);
+  }, [center.lng, center.lat, amapKey, serpApiKey, llmConfig.apiKey, llmConfig.baseUrl, llmConfig.model, serverBaseUrl]);
 
   // 地名联想
   useEffect(() => {
@@ -243,21 +243,30 @@ export const RentalPanel: React.FC<Props> = ({
       }
 
       // 手机端或支持电脑直接打开的平台（安居客 <slug>.zu.anjuke.com/fangyuan/?kw= 已实测直通 200）
+      // 原生 IPA 内不要在跳转前 await 剪贴板，防止丢失 iOS 手势激活导致拦截；直接异步复制并立即调原生跳转
+      const targetUrl =
+        platform === 'beike' && isMobileDevice() ? links.beikeMobile : links[platform];
       const tab = reserveTab();
-      const copied = await copyTextSilently(keyword);
+      const copyPromise = copyTextSilently(keyword);
+      const opened = await openExternalUrl(targetUrl, tab);
+      const copied = await Promise.race([copyPromise, new Promise<boolean>((r) => setTimeout(() => r(false), 120))]);
+
+      if (!opened) {
+        onToast(`跳转受阻，已尝试复制「${keyword}」，请到浏览器打开`);
+        return;
+      }
+
       if (platform === 'anjuke') {
         onToast(
           copied
-            ? `已跳转安居客（锁定${center.city.replace(/市$/, '')}·${listing.community}），词已复制`
-            : `正在打开安居客搜索「${listing.community}」`
+            ? `已打开安居客（锁定${center.city.replace(/市$/, '')}·${listing.community}），词已复制`
+            : `正在打开安居客查看「${listing.community}」`
         );
       } else if (platform === 'wuba') {
         onToast(copied ? `已复制「${keyword}」，正在打开 58 同城` : `正在打开 58 同城`);
       } else if (platform === 'beike') {
         onToast(`正在打开贝壳找房（${center.city.replace(/市$/, '')}）`);
       }
-
-      void openExternalUrl(platform === 'beike' && isMobileDevice() ? links.beikeMobile : links[platform], tab);
     },
     [center, onToast]
   );

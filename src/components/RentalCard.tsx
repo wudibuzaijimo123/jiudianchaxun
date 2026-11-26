@@ -134,6 +134,11 @@ export const RentalCard: React.FC<Props> = ({ listing, onOpen, onJump }) => {
             {listing.rentMonthly !== null && listing.rentDaily !== null && (
               <span className="rt-price-sub">日租 ¥{listing.rentDaily}</span>
             )}
+            {listing.verifiedSource && (
+              <span className="rt-pay-pill" style={{ background: '#dcfce7', color: '#15803d' }}>
+                公开原帖
+              </span>
+            )}
             {listing.payMethod && <span className="rt-pay-pill">{listing.payMethod}</span>}
           </div>
 

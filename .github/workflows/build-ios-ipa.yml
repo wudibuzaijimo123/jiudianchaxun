@@ -37,6 +37,8 @@ jobs:
             npx cap add ios
           fi
           npx cap sync ios
+          echo "---- Capacitor iOS Config ----"
+          cat ios/App/App/capacitor.config.json || true
 
       # 从 resources/icon.png 切出全套标准 iOS 图标尺寸，100% 兼容轻松签/全能签/巨魔/Sideloadly 等全部签名工具
       - name: Generate full iOS AppIcon set from resources/icon.png

@@ -1,5 +1,6 @@
 import { HotelItem } from '../types/hotel';
 import { isNativePackagedApp } from '../services/standaloneClient';
+import { amapTargetFrom, openInAmap } from './mapLaunch';
 import { openAppOrWeb, openExternalUrl, reserveTab } from './nativeBridge';
 
 export function isMobileDevice(): boolean {
@@ -83,9 +84,9 @@ export function buildPlatformLinks(hotel: HotelItem): PlatformLinks {
       : `https://uri.amap.com/marker?position=${hotel.lng},${hotel.lat}&name=${encodeURIComponent(
           hotel.name
         )}&src=jiudianchaxun-pwa&coordinate=gaode&callnative=1`,
-    amapNav: `https://uri.amap.com/marker?position=${hotel.lng},${hotel.lat}&name=${encodeURIComponent(
+    amapNav: `https://uri.amap.com/navigation?to=${hotel.lng},${hotel.lat},${encodeURIComponent(
       hotel.name
-    )}&src=jiudianchaxun-pwa&coordinate=gaode&callnative=1`,
+    )}&mode=car&policy=1&src=jiudianchaxun&coordinate=gaode&callnative=1`,
     baiduNav: `https://api.map.baidu.com/marker?location=${hotel.lat},${hotel.lng}&title=${encodeURIComponent(
       hotel.name
     )}&content=${encodeURIComponent(hotel.address)}&output=html&coord_type=gcj02&src=jiudianchaxun`,
@@ -109,16 +110,15 @@ export async function launchMeituanPurchase(
 ): Promise<void> {
   const links = buildPlatformLinks(hotel);
   const exactQuery = buildExactStoreQuery(hotel);
-  // 点击事件里先占位，避免复制完成后再 window.open 被浏览器拦成弹窗
   const tab = reserveTab();
-  await copyTextSilently(exactQuery);
+  void copyTextSilently(exactQuery);
 
   if (isMobileDevice()) {
     onToast?.(`正在唤起美团 App 锁定「${exactQuery}」`);
     const opened = await openExternalUrl(links.meituanApp, tab);
     if (!opened) {
-      onToast?.('未检测到美团 App，店名已复制，可到浏览器粘贴搜索');
-      await openExternalUrl(links.ctripWeb, tab);
+      onToast?.('未检测到美团 App，店名已复制，已打开高德门店比价页');
+      await openExternalUrl(links.amapPoiApp, tab);
     }
     return;
   }
@@ -141,7 +141,7 @@ export async function smartLaunchPlatform(
   const exactQuery = buildExactStoreQuery(hotel);
   const mobile = isMobileDevice();
   const tab = reserveTab();
-  await copyTextSilently(exactQuery);
+  void copyTextSilently(exactQuery);
 
   if (platform === 'amap_detail') {
     onToast?.(`正在打开「${hotel.name}」高德唯一门店ID比价页`);
@@ -184,7 +184,19 @@ export async function smartLaunchPlatform(
   }
 
   if (platform === 'amap') {
-    onToast?.(`正在打开高德地图路线规划`);
+    onToast?.('正在打开高德地图路线规划');
+    if (isNativePackagedApp()) {
+      await openInAmap(
+        amapTargetFrom({
+          name: hotel.name,
+          address: hotel.address,
+          city: hotel.city,
+          lng: hotel.lng,
+          lat: hotel.lat,
+        })
+      );
+      return;
+    }
     await openExternalUrl(links.amapNav, tab);
   }
 }

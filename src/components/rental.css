@@ -656,6 +656,7 @@
 
 .rt-card {
   display: flex;
+  min-width: 0;
   background: #ffffff;
   border-radius: 14px;
   border: 1.5px solid transparent;
@@ -1491,13 +1492,16 @@
   }
 }
 
-/* 宽屏桌面优化：租房卡片 2 列网格排布 + 更清晰的悬停边框 */
-@media (min-width: 960px) {
+/* 宽屏桌面优化：租房卡片双列网格排布（grid-auto-rows: max-content 防止卡片被压扁） */
+@media (min-width: 980px) {
   .rent-mode .rt-list {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(460px, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-rows: max-content;
     align-content: start;
+    align-items: start;
     gap: 12px;
+    overflow-x: hidden;
   }
 
   .rent-mode .rt-loading,

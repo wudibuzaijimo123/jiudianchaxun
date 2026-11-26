@@ -11,7 +11,7 @@ import { fetchAmapPoiMedia } from './rentalService';
 import { calcDistanceMeters } from '../utils/coordTransform';
 import { anjukeCitySlug, bossCityCode } from '../utils/citySlug';
 
-const CACHE_KEY = 'jdcx_job_cache_v2';
+const CACHE_KEY = 'jdcx_job_cache_v3';
 const CACHE_TTL = 30 * 60 * 1000;
 
 export interface GroundedEmployerPoi {
@@ -112,6 +112,10 @@ function normalizeJob(raw: any, idx: number, fallbackDistrict?: string): JobList
     description: String(raw.description || raw.desc || '').trim() || undefined,
     publishText: String(raw.publishText || '').trim() || undefined,
     photos: [],
+    sourceUrl: /^https?:\/\//i.test(String(raw.sourceUrl || ''))
+      ? String(raw.sourceUrl).trim()
+      : undefined,
+    verifiedSource: Boolean(raw.verifiedSource && /^https?:\/\//i.test(String(raw.sourceUrl || ''))),
     source: 'ai_search',
   };
 }
@@ -185,7 +189,7 @@ export async function enrichJobMedia(
   return out;
 }
 
-/** 使用高德周边搜索拉取搜索点周边真实餐饮/商超/酒店/物流/企业实体单位（防 AI 幻觉编造虚假店铺） */
+/** 使用高德周边搜索拉取正规大中型用工单位（酒店、大型商超、购物中心、医院、产业园区、物流站点），绝不抓街边小吃/五金小店假造招聘 */
 export async function fetchNearbyRealEmployers(
   center: SearchCenter,
   radius: number,
@@ -194,10 +198,10 @@ export async function fetchNearbyRealEmployers(
   const key = amapKey.trim();
   if (!key) return [];
   try {
-    const rMeters = Math.min(Math.max(radius, 1000), 10000);
+    const rMeters = Math.min(Math.max(radius, 1500), 10000);
     const url =
       `https://restapi.amap.com/v5/place/around?key=${encodeURIComponent(key)}` +
-      `&location=${center.lng},${center.lat}&types=050000|060000|100000|170000&radius=${rMeters}` +
+      `&location=${center.lng},${center.lat}&types=100000|060100|060400|090100|170200|150200&radius=${rMeters}` +
       '&page_size=24&page_num=1&sortrule=distance&show_fields=photos';
     const resp = await fetch(url);
     const data = await resp.json();
@@ -208,7 +212,16 @@ export async function fetchNearbyRealEmployers(
     for (const poi of data.pois) {
       const name = String(poi.name || '').trim();
       if (!name || seen.has(name)) continue;
-      if (/公厕|洗手间|停车场|ATM|丰巢|菜鸟驿站/.test(name)) continue;
+      if (
+        /公厕|洗手间|停车场|ATM|丰巢|菜鸟驿站|小吃|炸肉|烧烤|羊肉馆|面馆|五金|水电|文具|小卖部|菜摊|美甲|理发|彩票|熟食|烟酒|百货店|副食/.test(
+          name
+        ) &&
+        !/汉庭|全季|如家|亚朵|维也纳|大润发|家家悦|永辉|华联|沃尔玛|银座|万达|顺丰|京东/.test(
+          name
+        )
+      ) {
+        continue;
+      }
       const [lngStr, latStr] = String(poi.location || '').split(',');
       const lng = Number(lngStr);
       const lat = Number(latStr);
@@ -535,7 +548,7 @@ export interface JobQueryOptions {
 /** 联网检索周边招聘：优先后端代理，独立 IPA 未配服务器时端侧直连大模型 */
 export async function searchJobs(options: JobQueryOptions): Promise<JobSearchResult> {
   const { center, radius, llm, amapKey = '', serverBaseUrl = '', serpApiKey = '', force } = options;
-  const cacheKey = `${center.city}|${center.name}|${radius}|${amapKey ? 'amap' : 'no'}`;
+  const cacheKey = `${center.city}|${center.name}|${radius}|${amapKey ? 'amap' : 'no'}|${serpApiKey ? 's' : 'n'}`;
 
   if (!force) {
     const cached = readCache(cacheKey);
@@ -679,10 +692,19 @@ export function buildJobPlatformLinks(center: SearchCenter, job?: JobListing | n
   const encodedFull = encodeURIComponent(fullKw);
 
   return {
-    boss: buildBossSearchUrl(center.city, bossKw),
-    wuba: `https://m.58.com/${slug ? `${slug}/` : ''}job/?key=${encodedBoss}`,
+    boss:
+      job?.sourceUrl && /zhipin\.com/i.test(job.sourceUrl)
+        ? job.sourceUrl
+        : buildBossSearchUrl(center.city, bossKw),
+    wuba:
+      job?.sourceUrl && /58\.com/i.test(job.sourceUrl)
+        ? job.sourceUrl
+        : `https://m.58.com/${slug ? `${slug}/` : ''}job/?key=${encodedBoss}`,
     wubaPc: `https://${slug ? `${slug}.` : 'www.'}58.com/job/?key=${encodedBoss}`,
-    zhaopin: `https://www.zhaopin.com/sou/?kw=${encodedFull}`,
+    zhaopin:
+      job?.sourceUrl && /zhaopin\.com/i.test(job.sourceUrl)
+        ? job.sourceUrl
+        : `https://www.zhaopin.com/sou/?kw=${encodedFull}`,
   };
 }
 

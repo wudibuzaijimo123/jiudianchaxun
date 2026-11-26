@@ -1,3 +1,5 @@
+import { AppLauncher } from '@capacitor/app-launcher';
+import { Browser } from '@capacitor/browser';
 import { isNativePackagedApp } from '../services/standaloneClient';
 
 /** 需要在系统里唤起的第三方 App scheme 及拨号/邮件协议 */
@@ -8,11 +10,23 @@ export function isHttpUrl(url: string): boolean {
   return /^https?:\/\//i.test(url);
 }
 
+/** 对包含中文或特殊符号的外部链接做合法 ASCII URI 规范化，避免 Swift URL(string:) 返回 nil */
+function normalizeExternalUrl(raw: string): string {
+  const trimmed = String(raw || '').trim();
+  if (!trimmed) return '';
+  if (isHttpUrl(trimmed)) {
+    try {
+      return new URL(trimmed).toString();
+    } catch {
+      return encodeURI(trimmed);
+    }
+  }
+  return trimmed;
+}
+
 /**
  * 在用户点击的同一个事件回调里先占一个空白标签页。
- *
- * 浏览器只允许「同步」发起的 window.open；如果先 await 复制关键词再打开，
- * 就被当成弹窗拦截（点按钮完全没反应）。所以先占位，异步拿到地址后再填进去。
+ * 浏览器只允许同步发起的 window.open；原生壳内无需占位。
  */
 export function reserveTab(): Window | null {
   if (isNativePackagedApp()) return null;
@@ -22,7 +36,7 @@ export function reserveTab(): Window | null {
       try {
         win.opener = null;
       } catch {
-        // 个别浏览器禁止改写 opener，忽略即可
+        // ignore
       }
     }
     return win;
@@ -32,49 +46,59 @@ export function reserveTab(): Window | null {
 }
 
 /**
- * 统一的外部链接打开入口。
- *
- * 网页 / PWA 里用 window.open 就够了，但装进 Capacitor 的 iOS IPA 之后：
- * - WKWebView 默认不支持 window.open（点了没反应）；
- * - 自定义 scheme（imeituan://、ssnsdk1128://）必须交给原生层用 UIApplication.open 处理。
- * 所以原生壳内改走 AppLauncher / Browser 插件，失败再回退。
- *
- * `reserved` 是 reserveTab() 预留的标签页，优先复用它，避免弹窗拦截。
+ * 统一的外部链接打开入口（全面兼容网页 / PWA / Capacitor iOS IPA）。
  */
 export async function openExternalUrl(url: string, reserved?: Window | null): Promise<boolean> {
-  if (!url) return false;
+  const safeUrl = normalizeExternalUrl(url);
+  if (!safeUrl) return false;
 
   if (!isNativePackagedApp()) {
     if (reserved && !reserved.closed) {
-      reserved.location.href = url;
+      reserved.location.href = safeUrl;
       return true;
     }
-    window.open(url, '_blank', 'noopener,noreferrer');
+    window.open(safeUrl, '_blank', 'noopener,noreferrer');
     return true;
   }
 
-  if (CUSTOM_SCHEME.test(url)) {
+  // 1. 自定义 App Scheme（imeituan://、iosamap:// 等）走原生 UIApplication.open，必须校验 completed 才算成功
+  if (CUSTOM_SCHEME.test(safeUrl)) {
     try {
-      const { AppLauncher } = await import('@capacitor/app-launcher');
-      await AppLauncher.openUrl({ url });
+      const res = await AppLauncher.openUrl({ url: safeUrl });
+      return Boolean(res?.completed ?? true);
+    } catch {
+      return false;
+    }
+  }
+
+  // 2. HTTP / HTTPS 在独立 iOS IPA 内优先用 AppLauncher.openUrl（系统 UIApplication.open）：
+  // 直接唤起系统 Safari 或目标 Universal Link App，避开 SFSafariViewController 复用状态卡死与 302 拦截问题
+  if (isHttpUrl(safeUrl)) {
+    try {
+      const res = await AppLauncher.openUrl({ url: safeUrl });
+      if (res?.completed !== false) {
+        return true;
+      }
+    } catch {
+      // fall through to Browser plugin
+    }
+
+    try {
+      await Browser.open({ url: safeUrl });
+      return true;
+    } catch {
+      // fall through to WebView navigation
+    }
+
+    try {
+      window.location.assign(safeUrl);
       return true;
     } catch {
       return false;
     }
   }
 
-  if (isHttpUrl(url)) {
-    try {
-      const { Browser } = await import('@capacitor/browser');
-      await Browser.open({ url });
-      return true;
-    } catch {
-      window.location.href = url;
-      return true;
-    }
-  }
-
-  window.location.href = url;
+  window.location.href = safeUrl;
   return true;
 }
 

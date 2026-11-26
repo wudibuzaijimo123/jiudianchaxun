@@ -544,7 +544,7 @@ const server = http.createServer(async (req, res) => {
 
       const cleanCity = String(city).replace(/市$/, '');
       const poiSig = Array.isArray(realPois) ? realPois.length : 0;
-      const cacheKey = `rentals_v2:${cleanCity}:${centerName}:${radius}:${maxRent || ''}:${poiSig}`;
+      const cacheKey = `rentals_v3:${cleanCity}:${centerName}:${radius}:${maxRent || ''}:${poiSig}:${serpApiKey ? 's' : 'n'}`;
       const cached = getCached(cacheKey);
       if (cached) {
         res.statusCode = 200;
@@ -554,18 +554,21 @@ const server = http.createServer(async (req, res) => {
 
       const snippets = serpApiKey
         ? await searchCnWebSnippets(
-            `${cleanCity} ${centerName} 租房 (安居客 OR 58同城 OR 贝壳) 月租 整租 合租 单间`,
+            `${cleanCity} ${centerName} 租房 (site:anjuke.com OR site:58.com OR site:ke.com) 月租`,
             serpApiKey
           )
         : [];
       const evidence = snippets
-        .slice(0, 8)
-        .map((s, i) => `[${i + 1}] ${s.title || ''}：${s.snippet || ''}`)
+        .slice(0, 10)
+        .map(
+          (s, i) =>
+            `[${i + 1}] 标题="${s.title || ''}" | URL="${s.link || ''}" | 摘要="${s.snippet || ''}"`
+        )
         .join('\n');
 
       const realCommunityLines = Array.isArray(realPois)
         ? realPois
-            .slice(0, 18)
+            .slice(0, 16)
             .map(
               (p, i) =>
                 `${i + 1}. 小区名="${p.name}" | 区县="${p.district || ''}" | 真实地址="${
@@ -576,27 +579,21 @@ const server = http.createServer(async (req, res) => {
         : '';
 
       const rangeText = radiusNum >= 1000 ? `${Math.round(radiusNum / 1000)}km` : `${radiusNum}m`;
-      const nearM = Math.max(150, Math.round(radiusNum * 0.08));
-      const midM = Math.max(nearM + 200, Math.round(radiusNum * 0.4));
-      const prompt = `请检索「${cleanCity} ${centerName}」周边 ${rangeText} 内真实可租房源，参照安居客/58同城/贝壳该地段挂牌特征，输出约 ${count} 条。
+      const prompt = `请检索「${cleanCity} ${centerName}」周边 ${rangeText} 内真实可租房源，输出约 ${count} 条。
 ${
-  realCommunityLines
-    ? `【高德地图实测周边真实小区/公寓名单（必须严格从下列真实小区选点，原样使用其小区名、区县、真实地址与距离，严禁编造虚构小区名！）】：\n${realCommunityLines}\n`
+  evidence
+    ? `【第一优先级：公开平台真实在租房源摘要（安居客/58/贝壳原文，务必优先提取这些真正在挂牌的小区与租金，并原样填入其 URL 到 sourceUrl，verifiedSource 设为 true！）】：\n${evidence}\n\n`
     : ''
-}硬性要求：1) 同一小区最多出 2 条且户型不同，标题用「类型·小区名 户型」，不要每条都以「${centerName}」开头；
-2) ${
-        realCommunityLines
-          ? 'community、district、address、distanceMeters 必须严格与上方真实小区名单一致；'
-          : `距离铺满整个 ${rangeText}（约 1/3 在 ${nearM}-${midM}m，约 1/3 在 ${midM}m-${Math.round(
-              radiusNum * 0.8
-            )}m）；`
-      }
-3) 租金分低中高三档，贴合当地行情${maxRent ? `，月租尽量不超过 ${maxRent} 元` : ''}；
-4) 类型混合整租/合租/单间/床位/日租/公寓；
-5) 不要编造房东手机号、不要输出联系方式。
-${evidence ? `\n公开检索摘要（仅作行情参考）：\n${evidence}\n` : ''}
+}${
+  realCommunityLines
+    ? `【第二优先级：高德实测周边真实住宅小区名单（当上方公开原文不足 ${count} 条时，从中挑选小区补充，原样使用小区名、区县、地址和距离，verifiedSource 设为 false；绝不选学校宿舍）】：\n${realCommunityLines}\n`
+    : ''
+}硬性要求：
+1) 若来自【公开平台真实在租房源摘要】，必须保留真实小区名、租金、sourceUrl 且 verifiedSource=true；
+2) 同一小区最多 2 条且户型不同；
+3) 不要编造房东手机号、不要输出联系方式。
 严格只返回 JSON 数组，每项字段：
-{"title":"整租·阳光花园 2室1厅","community":"阳光花园","district":"城关区","address":"建设路88号","kind":"整租","layout":"2室1厅1卫","area":89,"floor":"中楼层/18层","orientation":"南","decoration":"精装","rentMonthly":1800,"rentDaily":null,"payMethod":"押一付三","minLease":"一年起租","tags":["近地铁","有电梯"],"facilities":["空调","洗衣机","热水器","宽带","独卫"],"distanceMeters":420,"basis":"高德实测小区·地段行情","riskNote":"合租需确认是否独卫"}`;
+{"title":"整租·宏昌家园 2室2厅","community":"宏昌家园","district":"章丘区","address":"福泰路829号","kind":"整租","layout":"2室2厅1卫","area":102,"floor":"中楼层/11层","orientation":"南","decoration":"精装","rentMonthly":1200,"rentDaily":null,"payMethod":"押一付三","minLease":"一年起租","tags":["近学校","有电梯"],"facilities":["空调","洗衣机","热水器","宽带"],"distanceMeters":620,"sourceUrl":"https://jn.zu.anjuke.com/...","verifiedSource":true,"basis":"安居客/58公开在租原帖","riskNote":"签约前请核验房产证"}`;
 
       const rawReply = await callOpenAiCompatibleLlm(
         llm,
@@ -640,7 +637,7 @@ ${evidence ? `\n公开检索摘要（仅作行情参考）：\n${evidence}\n` : 
 
       const cleanCity = String(city).replace(/市$/, '');
       const empSig = Array.isArray(realEmployers) ? realEmployers.length : 0;
-      const cacheKey = `jobs_v2:${cleanCity}:${centerName}:${radius}:${empSig}`;
+      const cacheKey = `jobs_v3:${cleanCity}:${centerName}:${radius}:${empSig}:${serpApiKey ? 's' : 'n'}`;
       const cached = getCached(cacheKey);
       if (cached) {
         res.statusCode = 200;
@@ -650,21 +647,24 @@ ${evidence ? `\n公开检索摘要（仅作行情参考）：\n${evidence}\n` : 
 
       const snippets = serpApiKey
         ? await searchCnWebSnippets(
-            `${cleanCity} ${centerName} 招聘 (BOSS直聘 OR 58同城 OR 智联招聘) 工资 服务员 店员`,
+            `${cleanCity} ${centerName} 招聘 (site:zhipin.com OR site:58.com OR site:zhaopin.com) 工资`,
             serpApiKey
           )
         : [];
       const evidence = snippets
-        .slice(0, 8)
-        .map((s, i) => `[${i + 1}] ${s.title || ''}：${s.snippet || ''}`)
+        .slice(0, 10)
+        .map(
+          (s, i) =>
+            `[${i + 1}] 标题="${s.title || ''}" | URL="${s.link || ''}" | 摘要="${s.snippet || ''}"`
+        )
         .join('\n');
 
       const realEmployerLines = Array.isArray(realEmployers)
         ? realEmployers
-            .slice(0, 20)
+            .slice(0, 16)
             .map(
               (p, i) =>
-                `${i + 1}. 单位名="${p.name}" | 业态="${p.category || '门店商户'}" | 区县="${
+                `${i + 1}. 单位名="${p.name}" | 业态="${p.category || '大型商超/酒店/企业'}" | 区县="${
                   p.district || ''
                 }" | 真实地址="${p.address || ''}" | 距中心=${p.distanceMeters}m`
             )
@@ -672,23 +672,22 @@ ${evidence ? `\n公开检索摘要（仅作行情参考）：\n${evidence}\n` : 
         : '';
 
       const rangeText = radiusNum >= 1000 ? `${Math.round(radiusNum / 1000)}km` : `${radiusNum}m`;
-      const nearM = Math.max(150, Math.round(radiusNum * 0.08));
-      const midM = Math.max(nearM + 200, Math.round(radiusNum * 0.4));
-      const prompt = `请检索「${cleanCity} ${centerName}」周边 ${rangeText} 内真实常见在招岗位（参照 BOSS直聘/58同城/智联招聘该地段门店与企业招聘特征），输出约 ${count} 条。
+      const prompt = `请检索「${cleanCity} ${centerName}」周边 ${rangeText} 内真正公开在招的岗位（BOSS直聘/58同城/智联招聘），输出约 ${count} 条。
 ${
-  realEmployerLines
-    ? `【高德地图实测周边真实商户/酒店/商超/企业名单（必须严格基于下列真实存在的单位生成与其业态匹配的岗位，原样采用其单位名 company、区县 district、真实地址 address 与距离 distanceMeters，严禁编造虚构厂名店名！）】：\n${realEmployerLines}\n`
+  evidence
+    ? `【第一优先级：公开招聘平台真实在招原文摘要（务必优先从下方摘要提取真实企业与岗位，原样将对应 URL 写入 sourceUrl，verifiedSource 设为 true！）】：\n${evidence}\n\n`
     : ''
-}要求：1) 岗位与该单位业态严密对应（餐饮店招服务员/后厨/收银、便利店商超招理货员/店员、酒店招前台/客房保洁、物流快递招分拣/骑手、企业工厂招普工/文员），不要编造大厂高薪岗位；
-2) 薪资符合当地真实行情并注明单位（元/月、元/天、元/时）；类型覆盖全职/兼职/日结/钟点工/实习；
-3) 单位名称互不相同，不要同一家店重复多条；${
-        realEmployerLines
-          ? '严格使用上方名单中的真实单位名称与地址；'
-          : `距离铺满 ${rangeText}（${nearM}-${midM}m 至 ${rangeText}）；`
-      }不要编造 HR 手机号或微信号。
-${evidence ? `\n公开检索摘要（仅作行情参考）：\n${evidence}\n` : ''}
+}${
+  realEmployerLines
+    ? `【第二优先级：高德实测周边正规酒店/大型商超/园区企业（当上方公开原文不足 ${count} 条时，从中挑选真正可能有公开用工需求的正规单位补充，verifiedSource 设为 false）】：\n${realEmployerLines}\n\n`
+    : ''
+}严格真实性要求：
+1) 严禁给街边小五金店、炸肉店、小饭馆、小文具店编造虚假招聘广告！只输出公开原文岗位或正规连锁商超/酒店/物流/园区企业的常招岗位；
+2) 来自摘要的条目务必填写 sourceUrl（原样 URL）和 verifiedSource=true，publishText 写「平台公开在招」；
+3) 非公开原文条目的 verifiedSource=false，publishText 写「常招岗位检索(点右侧查真帖)」；
+4) 薪资注明单位（元/月、元/天、元/时），禁止编造手机号或微信号。
 严格只返回 JSON 数组，每项字段：
-{"title":"餐厅服务员","company":"老城火锅店","salaryText":"3200-4000元/月","salaryMin":3200,"salaryMax":4000,"salaryUnit":"月","type":"全职","experience":"经验不限","education":"学历不限","headcount":2,"district":"城关区","address":"建设路12号","distanceMeters":380,"tags":["包吃","月休4天","有提成"],"description":"负责点单、上菜、餐前准备。","publishText":"今天发布"}`;
+{"title":"超市理货员","company":"大润发超市","salaryText":"3200-4200元/月","salaryMin":3200,"salaryMax":4200,"salaryUnit":"月","type":"全职","experience":"经验不限","education":"学历不限","headcount":3,"district":"章丘区","address":"明水街道建设路12号","distanceMeters":880,"tags":["五险","包吃","月休4天"],"description":"负责卖场理货补货、陈列与收银支持。","sourceUrl":"","verifiedSource":false,"publishText":"常招岗位检索(点右侧查真帖)"}`;
 
       const rawReply = await callOpenAiCompatibleLlm(
         llm,

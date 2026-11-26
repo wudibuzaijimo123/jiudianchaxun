@@ -39,6 +39,9 @@ export interface JobListing {
   lat?: number;
   /** 坐标是否为按距离推算的近似位置 */
   geoApprox?: boolean;
+  /** 若来自公开招聘平台（BOSS直聘/58/智联）检索原文，记录直达原帖链接 */
+  sourceUrl?: string;
+  verifiedSource?: boolean;
   source: JobSource;
 }
 
