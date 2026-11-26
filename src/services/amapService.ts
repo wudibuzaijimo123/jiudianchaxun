@@ -5,6 +5,7 @@ import {
 } from '../data/demoHotels';
 import {
   AvailabilityStatus,
+  CardRoomRow,
   DataSourceMode,
   HotelCategory,
   HotelItem,
@@ -481,17 +482,20 @@ async function fetchLiveHotelInventory(
       const offers = parseSerpOffers(prop);
 
       // 构建直接在卡片正面展示的实时客房情况行
-      const liveCardRooms: { name: string; status: string; price: number; isLive?: boolean }[] = [];
+      const liveCardRooms: CardRoomRow[] = [];
       for (const off of offers) {
         for (const rm of off.rooms) {
-          if (liveCardRooms.length < 3) {
-            liveCardRooms.push({
-              name: `${rm.name} (${off.source})`,
-              status: '实时有房',
-              price: rm.nightlyPrice,
-              isLive: true,
-            });
-          }
+        if (rm && liveCardRooms.length < 4) {
+          liveCardRooms.push({
+            name: `${rm.name}`,
+            spec: `${off.source}${rm.numGuests ? ` · 可住${rm.numGuests}人` : ''}`,
+            status: '实时有空房',
+            leftText: '在线可订',
+            price: rm.nightlyPrice,
+            isLive: true,
+            bookUrl: rm.link || off.link,
+          });
+        }
         }
       }
       if (liveCardRooms.length === 0 && offers.length > 0) {

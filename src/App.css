@@ -3112,3 +3112,176 @@ input {
   border-radius: 5px;
   cursor: pointer;
 }
+
+
+/* ========== 列表卡片内嵌【实时客房情况看板】强化样式 ========== */
+.hotel-card-thumb {
+  width: 124px;
+  min-height: 186px;
+}
+
+.hotel-rooms-board {
+  margin-top: 3px;
+  border-radius: 10px;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  overflow: hidden;
+}
+
+.hotel-rooms-board.src-live_ota {
+  border-color: #93c5fd;
+  background: #f0f7ff;
+}
+
+.hotel-rooms-board.src-ai_search {
+  border-color: #d8b4fe;
+  background: #faf5ff;
+}
+
+.rooms-board-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 5px 8px;
+  background: rgba(15, 23, 42, 0.04);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.22);
+  font-size: 11px;
+}
+
+.rb-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.rb-source {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: #475569;
+}
+
+.src-live_ota .rb-source {
+  color: #1d4ed8;
+}
+
+.src-ai_search .rb-source {
+  color: #6d28d9;
+}
+
+.rooms-board-rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.rb-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 5px 8px;
+  border-bottom: 1px dashed rgba(203, 213, 225, 0.6);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.rb-row:last-child {
+  border-bottom: none;
+}
+
+.rb-room-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.rb-room-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rb-room-spec {
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rb-room-right {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.rb-vacancy-pill {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1.5px 5px;
+  border-radius: 4px;
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.rb-vacancy-pill.live {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.rb-vacancy-pill.tight {
+  background: #ffedd5;
+  color: #c2410c;
+}
+
+.rb-vacancy-pill.full {
+  background: #ffe4e6;
+  color: #be123c;
+}
+
+.rb-room-price {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--price);
+  min-width: 38px;
+  text-align: right;
+}
+
+.rb-book-mini {
+  border: none;
+  background: #ffd000;
+  color: #1c1917;
+  font-size: 10.5px;
+  font-weight: 800;
+  padding: 2.5px 7px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.rb-book-mini:hover {
+  background: #facc15;
+}
+
+.rb-expand-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border: none;
+  border-top: 1px solid rgba(203, 213, 225, 0.5);
+  background: rgba(248, 250, 252, 0.9);
+  color: var(--primary);
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 4px 0;
+  cursor: pointer;
+}

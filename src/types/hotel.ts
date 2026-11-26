@@ -47,9 +47,12 @@ export interface RoomHint {
 
 export interface CardRoomRow {
   name: string;
+  spec?: string;
   status: string;
+  leftText?: string;
   price: number;
   isLive?: boolean;
+  bookUrl?: string;
 }
 
 export interface HotelItem {
@@ -77,6 +80,8 @@ export interface HotelItem {
   aiPriceRange?: string;
   aiRoomBrief?: string;
   aiBasis?: string;
+  /** AI 或实时接口返回的整体房态摘要（如“今日房源充足”） */
+  vacancySummary?: string;
   /** 直接展示在列表卡片正面的实时客房情况明细行 */
   cardRooms?: CardRoomRow[];
   /** 今日空房状态 */

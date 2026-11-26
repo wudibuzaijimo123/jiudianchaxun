@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   BedDouble,
   Bot,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   ExternalLink,
   Heart,
   Loader2,
@@ -15,13 +17,14 @@ import {
   Zap,
 } from 'lucide-react';
 import { FALLBACK_HOTEL_PHOTOS } from '../data/demoHotels';
-import { HotelItem } from '../types/hotel';
+import { CardRoomRow, HotelItem } from '../types/hotel';
 import { estimateTravelHint, formatDistance } from '../utils/coordTransform';
 
 interface Props {
   hotel: HotelItem;
   isFavorite: boolean;
   isSelected: boolean;
+  checkIn?: string;
   aiLoading?: boolean;
   onSelect: (hotel: HotelItem) => void;
   onToggleFavorite: (hotel: HotelItem, e: React.MouseEvent) => void;
@@ -36,27 +39,49 @@ export const HotelCard: React.FC<Props> = ({
   hotel,
   isFavorite,
   isSelected,
+  checkIn,
   aiLoading,
   onSelect,
   onToggleFavorite,
   onQuickPlatformJump,
 }) => {
+  const [expandAllRooms, setExpandAllRooms] = useState(false);
+
   const coverUrl =
     hotel.photos[0] ||
     FALLBACK_HOTEL_PHOTOS[hotel.category]?.[0] ||
     FALLBACK_HOTEL_PHOTOS.comfort[0];
 
-  const roomsToDisplay =
+  // 构建卡片内嵌【实时客房情况】列表：优先在线实时库存 -> AI全网实查房型 -> 门店基础房型库
+  const allRooms: CardRoomRow[] =
     hotel.cardRooms && hotel.cardRooms.length > 0
       ? hotel.cardRooms
-      : hotel.minPrice
-      ? hotel.roomHints.slice(0, 2).map((r) => ({
+      : hotel.roomHints.map((r) => ({
           name: r.name,
-          status: '有房可订',
+          spec: `${r.bedInfo} · ${r.windowInfo}`,
+          status:
+            hotel.availability === 'sold_out'
+              ? '已满房'
+              : hotel.minPrice
+              ? '有空房'
+              : '常规房型',
+          leftText: hotel.minPrice ? '可订' : '电询/美团查',
           price: r.estPrice,
           isLive: hotel.priceSource === 'live_ota',
-        }))
-      : [];
+        }));
+
+  const visibleRooms = expandAllRooms ? allRooms : allRooms.slice(0, 2);
+
+  const sourceBadgeText =
+    hotel.priceSource === 'live_ota'
+      ? '⚡ 在线实时库存'
+      : hotel.priceSource === 'ai_search'
+      ? `🤖 AI全网实查${hotel.vacancySummary ? ` · ${hotel.vacancySummary}` : ''}`
+      : hotel.priceSource === 'amap_cost'
+      ? '✓ 高德收录房型'
+      : aiLoading
+      ? '正在同步实时房态...'
+      : '门店主力房型参考';
 
   return (
     <article
@@ -79,9 +104,11 @@ export const HotelCard: React.FC<Props> = ({
 
         {hotel.availability === 'sold_out' ? (
           <span className="avail-badge full">今日满房</span>
-        ) : hotel.availability === 'available' || roomsToDisplay.length > 0 ? (
-          <span className="avail-badge ok">● 今日有房</span>
-        ) : null}
+        ) : (
+          <span className="avail-badge ok">
+            ● {hotel.priceSource === 'live_ota' ? '实时有空房' : '今日有房'}
+          </span>
+        )}
 
         <button
           type="button"
@@ -102,7 +129,7 @@ export const HotelCard: React.FC<Props> = ({
               {hotel.rating.toFixed(1)}
             </span>
           ) : (
-            <span className="rating-pill muted">周边实景</span>
+            <span className="rating-pill muted">实景收录</span>
           )}
         </div>
 
@@ -127,37 +154,90 @@ export const HotelCard: React.FC<Props> = ({
           <span>{hotel.address}</span>
         </div>
 
-        {/* ========== 直接在卡片正面展示【实时客房情况明细表】 ========== */}
-        {roomsToDisplay.length > 0 ? (
-          <div className="card-rooms-panel">
-            {roomsToDisplay.slice(0, 2).map((rm, idx) => (
-              <div key={`${rm.name}-${idx}`} className="card-room-row">
-                <span className="cr-name">
-                  <BedDouble size={11} /> {rm.name}
-                </span>
-                <span className="cr-right">
-                  <span className={`cr-status ${rm.isLive ? 'live' : ''}`}>
-                    {rm.status}
-                  </span>
-                  <strong className="cr-price">¥{rm.price}</strong>
-                </span>
-              </div>
-            ))}
+        {/* ========== 核心：直接内嵌在列表每张卡片上的【实时客房情况看板】 ========== */}
+        <div
+          className={`hotel-rooms-board src-${hotel.priceSource}`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="rooms-board-head">
+            <span className="rb-title">
+              <BedDouble size={12} /> 实时客房情况
+              {checkIn ? ` (${checkIn.slice(5)}入住)` : ''}
+            </span>
+            <span className="rb-source">
+              {aiLoading && hotel.priceSource === 'none' && (
+                <Loader2 size={10} className="spin" style={{ marginRight: 3 }} />
+              )}
+              {sourceBadgeText}
+            </span>
           </div>
-        ) : aiLoading ? (
-          <div className="card-rooms-loading">
-            <Loader2 size={12} className="spin" />
-            <span>正在实时检索该店今日客房与房价情况...</span>
+
+          <div className="rooms-board-rows">
+            {visibleRooms.map((rm, idx) => {
+              const isTight = /紧俏|仅剩|少量/.test(rm.status + (rm.leftText || ''));
+              const isFull = /满房|售罄|无房/.test(rm.status);
+
+              return (
+                <div key={`${rm.name}-${idx}`} className="rb-row">
+                  <div className="rb-room-info">
+                    <span className="rb-room-name">{rm.name}</span>
+                    {rm.spec && <span className="rb-room-spec">{rm.spec}</span>}
+                  </div>
+
+                  <div className="rb-room-right">
+                    <span
+                      className={`rb-vacancy-pill ${
+                        isFull ? 'full' : isTight ? 'tight' : rm.isLive ? 'live' : 'ok'
+                      }`}
+                    >
+                      {rm.status}
+                      {rm.leftText && rm.leftText !== rm.status ? `·${rm.leftText}` : ''}
+                    </span>
+
+                    <strong className="rb-room-price">
+                      {hotel.minPrice || hotel.priceSource !== 'none'
+                        ? `¥${rm.price}`
+                        : `约¥${rm.price}`}
+                    </strong>
+
+                    <button
+                      type="button"
+                      className="rb-book-mini"
+                      onClick={(e) => {
+                        if (rm.bookUrl) {
+                          e.stopPropagation();
+                          window.open(rm.bookUrl, '_blank', 'noopener,noreferrer');
+                        } else {
+                          onQuickPlatformJump(hotel, 'meituan', e);
+                        }
+                      }}
+                    >
+                      订
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        ) : (
-          <div className="hotel-tags-row">
-            {hotel.tags.slice(0, 3).map((tag) => (
-              <span key={tag} className="hotel-tag">
-                {tag}
-              </span>
-            ))}
-          </div>
-        )}
+
+          {allRooms.length > 2 && (
+            <button
+              type="button"
+              className="rb-expand-btn"
+              onClick={() => setExpandAllRooms((v) => !v)}
+            >
+              {expandAllRooms ? (
+                <>
+                  收起房型 <ChevronUp size={12} />
+                </>
+              ) : (
+                <>
+                  展开全部 {allRooms.length} 种房型 <ChevronDown size={12} />
+                </>
+              )}
+            </button>
+          )}
+        </div>
 
         <div className="hotel-bottom-bar">
           <div className="price-block">
@@ -173,19 +253,21 @@ export const HotelCard: React.FC<Props> = ({
                 )}
                 {hotel.priceSource === 'amap_cost' && (
                   <span className="real-price-tag">
-                    <CheckCircle2 size={10} /> 高德均价
+                    <CheckCircle2 size={10} /> 高德实价
                   </span>
                 )}
                 {hotel.priceSource === 'ai_search' && (
                   <span className="ai-price-tag">
-                    <Bot size={10} /> AI搜价
+                    <Bot size={10} /> AI实查
                   </span>
                 )}
               </>
-            ) : hotel.availability === 'sold_out' ? (
-              <span className="price-soldout">所选日期满房</span>
             ) : (
-              <span className="price-tbd">点详情核查房态</span>
+              <>
+                <span className="currency">约¥</span>
+                <span className="price-num">{allRooms[0]?.price || 119}</span>
+                <span className="price-unit">/晚起</span>
+              </>
             )}
           </div>
 
@@ -214,7 +296,7 @@ export const HotelCard: React.FC<Props> = ({
                 onSelect(hotel);
               }}
             >
-              全部房型 <ExternalLink size={11} />
+              详情 <ExternalLink size={11} />
             </button>
           </div>
         </div>

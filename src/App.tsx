@@ -148,7 +148,7 @@ export const App: React.FC = () => {
     window.history.replaceState(null, '', window.location.pathname);
   }, []);
 
-  // AI 自动批量全网检索未挂牌酒店价格并直接打印到列表卡片与地图气泡上
+  // AI 并发分批全网检索周边酒店客房与房价情况（每批 5 家并发请求，3~5 秒极速刷上屏幕且绝不截断！）
   const triggerAiBatchPriceFill = useCallback(
     async (
       hotelsToCheck: HotelItem[],
@@ -161,8 +161,8 @@ export const App: React.FC = () => {
     ) => {
       if (!currentLlm.apiKey.trim()) return;
       const missing = forceAll
-        ? hotelsToCheck.slice(0, 16)
-        : hotelsToCheck.filter((h) => h.minPrice === null).slice(0, 16);
+        ? hotelsToCheck.slice(0, 18)
+        : hotelsToCheck.filter((h) => h.minPrice === null).slice(0, 18);
 
       if (missing.length === 0) return;
 
@@ -170,75 +170,103 @@ export const App: React.FC = () => {
         .filter((h) => h.minPrice !== null)
         .map((h) => ({ name: h.name, price: h.minPrice }));
 
+      // 拆分为每组 6 家的并发小批次，大幅缩短等待时间并避免 JSON 超长截断
+      const chunks: HotelItem[][] = [];
+      for (let i = 0; i < missing.length; i += 6) {
+        chunks.push(missing.slice(i, i + 6));
+      }
+
       setAiPricingLoading(true);
+      let firstError = '';
+
       try {
-        const resp = await fetch('/api/ai-batch-prices', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            llm: currentLlm,
-            serpApiKey: sKey,
-            city: targetCenter.city,
-            centerName: targetCenter.name,
-            checkIn: inDate,
-            checkOut: outDate,
-            hotels: missing.map((m) => ({
-              id: m.id,
-              name: m.name,
-              address: m.address,
-              categoryLabel: m.categoryLabel,
-              distance: m.distance,
-            })),
-            knownPrices,
-          }),
-        });
-        const data = await resp.json();
-        if (Array.isArray(data?.results) && data.results.length > 0) {
-          const priceMap = new Map<string, any>();
-          data.results.forEach((r: any) => {
-            if (r && r.id && Number.isFinite(Number(r.minPrice)) && Number(r.minPrice) > 0) {
-              priceMap.set(String(r.id), r);
+        await Promise.all(
+          chunks.map(async (chunk) => {
+            try {
+              const resp = await fetch('/api/ai-batch-prices', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  llm: currentLlm,
+                  serpApiKey: sKey,
+                  city: targetCenter.city,
+                  centerName: targetCenter.name,
+                  checkIn: inDate,
+                  checkOut: outDate,
+                  hotels: chunk.map((m) => ({
+                    id: m.id,
+                    name: m.name,
+                    address: m.address,
+                    categoryLabel: m.categoryLabel,
+                    distance: m.distance,
+                  })),
+                  knownPrices,
+                }),
+              });
+              const data = await resp.json();
+              if (!resp.ok || data?.error) {
+                if (!firstError && data?.error) firstError = String(data.error);
+                return;
+              }
+              if (Array.isArray(data?.results) && data.results.length > 0) {
+                const priceMap = new Map<string, any>();
+                data.results.forEach((r: any) => {
+                  if (r && r.id && Number.isFinite(Number(r.minPrice)) && Number(r.minPrice) > 0) {
+                    priceMap.set(String(r.id), r);
+                  }
+                });
+
+                if (priceMap.size > 0) {
+                  // 每完成一个小批次立即流式刷新对应卡片与地图气泡！
+                  setRawHotels((prev) =>
+                    prev.map((item) => {
+                      const hit = priceMap.get(item.id);
+                      if (!hit) return item;
+                      if (!forceAll && item.minPrice !== null) return item;
+
+                      const aiRooms = Array.isArray(hit.rooms)
+                        ? hit.rooms
+                            .filter((rm: any) => rm?.name && Number(rm?.price) > 0)
+                            .map((rm: any) => ({
+                              name: String(rm.name),
+                              spec: rm.spec ? String(rm.spec) : undefined,
+                              status: String(rm.status || '有空房'),
+                              leftText: rm.leftText ? String(rm.leftText) : undefined,
+                              price: Math.round(Number(rm.price)),
+                              isLive: false,
+                            }))
+                        : undefined;
+
+                      return {
+                        ...item,
+                        minPrice: Math.round(Number(hit.minPrice)),
+                        priceSource: 'ai_search',
+                        availability:
+                          item.availability === 'unknown' ? 'available' : item.availability,
+                        vacancySummary: hit.vacancyHint ? String(hit.vacancyHint) : undefined,
+                        aiPriceRange: hit.priceRange ? String(hit.priceRange) : undefined,
+                        aiRoomBrief: hit.roomBrief ? String(hit.roomBrief) : undefined,
+                        aiBasis: hit.basis ? String(hit.basis) : 'AI全网搜价',
+                        cardRooms: aiRooms && aiRooms.length > 0 ? aiRooms : item.cardRooms,
+                      };
+                    })
+                  );
+                }
+              }
+            } catch (err: any) {
+              if (!firstError) firstError = err?.message || 'AI 请求网络异常';
             }
-          });
+          })
+        );
 
-          if (priceMap.size > 0) {
-            setRawHotels((prev) =>
-              prev.map((item) => {
-                const hit = priceMap.get(item.id);
-                if (!hit) return item;
-                if (!forceAll && item.minPrice !== null) return item;
-                const aiRooms = Array.isArray(hit.rooms)
-                  ? hit.rooms
-                      .filter((rm: any) => rm?.name && Number(rm?.price) > 0)
-                      .map((rm: any) => ({
-                        name: String(rm.name),
-                        status: String(rm.status || '有房'),
-                        price: Math.round(Number(rm.price)),
-                        isLive: false,
-                      }))
-                  : undefined;
-
-                return {
-                  ...item,
-                  minPrice: Math.round(Number(hit.minPrice)),
-                  priceSource: 'ai_search',
-                  availability: item.availability === 'unknown' ? 'available' : item.availability,
-                  aiPriceRange: hit.priceRange ? String(hit.priceRange) : undefined,
-                  aiRoomBrief: hit.roomBrief ? String(hit.roomBrief) : undefined,
-                  aiBasis: hit.basis ? String(hit.basis) : 'AI全网搜价',
-                  cardRooms: aiRooms && aiRooms.length > 0 ? aiRooms : item.cardRooms,
-                };
-              })
-            );
-          }
+        if (firstError) {
+          showToast(`AI 搜价提示：${firstError}`);
         }
-      } catch {
-        // ignore
       } finally {
         setAiPricingLoading(false);
       }
     },
-    []
+    [showToast]
   );
 
   // 执行周边酒店 + 实时空房房价 + AI 自动补齐房价查询
@@ -578,6 +606,7 @@ export const App: React.FC = () => {
                     hotel={hotel}
                     isFavorite={favoriteIds.has(hotel.id)}
                     isSelected={selectedHotel?.id === hotel.id}
+                    checkIn={checkIn}
                     aiLoading={aiPricingLoading}
                     onSelect={(h) => {
                       setSelectedHotel(h);

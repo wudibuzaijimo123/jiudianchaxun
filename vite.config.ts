@@ -54,17 +54,59 @@ function extractJsonFromLlmText(rawText: string): any {
       try {
         return JSON.parse(arrMatch[0]);
       } catch {
-        // ignore
+        // 若数组末尾被截断，逐个抢救已闭合的顶层酒店对象
       }
     }
     const objMatch = cleaned.match(/\{[\s\S]*\}/);
-    if (objMatch) {
+    if (objMatch && !cleaned.trim().startsWith('[')) {
       try {
         return JSON.parse(objMatch[0]);
       } catch {
         // ignore
       }
     }
+
+    // 截断容错恢复：从数组中扫描所有完整闭合的顶层 { ... } 对象
+    const recovered: any[] = [];
+    let depth = 0;
+    let startIdx = -1;
+    let inStr = false;
+    let escape = false;
+
+    for (let i = 0; i < cleaned.length; i++) {
+      const ch = cleaned[i];
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      if (ch === '\\') {
+        escape = true;
+        continue;
+      }
+      if (ch === '"') {
+        inStr = !inStr;
+        continue;
+      }
+      if (inStr) continue;
+
+      if (ch === '{') {
+        if (depth === 0) startIdx = i;
+        depth++;
+      } else if (ch === '}') {
+        depth--;
+        if (depth === 0 && startIdx >= 0) {
+          const candidate = cleaned.slice(startIdx, i + 1);
+          try {
+            const obj = JSON.parse(candidate);
+            if (obj && obj.id) recovered.push(obj);
+          } catch {
+            // ignore broken fragment
+          }
+          startIdx = -1;
+        }
+      }
+    }
+    if (recovered.length > 0) return recovered;
   }
   return null;
 }
@@ -434,26 +476,29 @@ ${mergedSnippets || '（当前区域个体门店公开网页较少，请结合�
 【待定价酒店清单】：
 ${hotelListText}
 
-请严格返回一个 JSON 数组，包含每一家店的定价与客房情况对象（不要遗漏任何 id），格式如下：
+请严格返回一个 JSON 数组，包含每一家店的客房与房态明细对象（不要遗漏任何 id），格式如下：
 [
   {
     "id": "原样返回酒店id",
     "minPrice": 89,
-    "priceRange": "¥79-119",
+    "priceRange": "¥79-129",
     "vacancyHint": "今日有空房",
     "basis": "全网检索挂牌",
     "rooms": [
-      { "name": "特惠大床房", "status": "有房", "price": 89 },
-      { "name": "标准双床房", "status": "有房", "price": 109 }
+      { "name": "特惠大床房", "spec": "1.5m床·有窗·独卫", "status": "有空房", "leftText": "可订", "price": 89 },
+      { "name": "标准双床房", "spec": "1.2m×2床·有窗", "status": "有空房", "leftText": "可订", "price": 109 },
+      { "name": "精选商务大床房", "spec": "1.8m床·24㎡", "status": "房量紧俏", "leftText": "剩3间", "price": 129 }
     ]
   }
 ]
 要求：
-1. minPrice 和 rooms[].price 必须是贴合实际的纯整数（人民币元），每家店返回 2 个主力房型（如大床房、双床房或单人间）；村镇/高校门口个体小宾馆通常在 65~135 元，经济连锁在 129~229 元，中高端在 259~459 元；若网页摘要有明确价格优先采用网页实价。
+1. minPrice 和 rooms[].price 必须是贴合实际的纯整数（人民币元），每家店返回 3 个主力房型；村镇/高校门口个体小宾馆通常在 65~135 元，经济连锁在 129~229 元，中高端在 259~459 元；若网页摘要有明确价格优先采用网页实价。
 2. 只输出纯 JSON 数组！`;
 
-          const rawReply = await callOpenAiCompatibleLlm(llm, prompt, 1600);
+          console.log(`[ai-batch-prices] querying ${targetSlice.length} hotels near "${centerName}" via model=${llm.model}`);
+          const rawReply = await callOpenAiCompatibleLlm(llm, prompt, 3500);
           const parsed = extractJsonFromLlmText(rawReply);
+          console.log(`[ai-batch-prices] parsed=${Array.isArray(parsed) ? parsed.length : 'failed'}`);
 
           if (!Array.isArray(parsed)) {
             res.statusCode = 500;
