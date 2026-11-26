@@ -3316,3 +3316,64 @@ input {
 .buy-modal-btn:hover {
   filter: brightness(1.06);
 }
+
+/* ============ 崩溃兜底页 ============ */
+.app-crash-fallback {
+  max-width: 520px;
+  margin: 12vh auto 0;
+  padding: 24px 20px;
+  border-radius: 16px;
+  background: #ffffff;
+  border: 1px solid #e5e9f2;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+  text-align: center;
+}
+
+.app-crash-fallback h1 {
+  font-size: 17px;
+  margin: 0 0 8px;
+  color: #0f172a;
+}
+
+.app-crash-fallback p {
+  font-size: 13px;
+  line-height: 1.7;
+  color: #64748b;
+  margin: 0 0 12px;
+}
+
+.app-crash-fallback pre {
+  max-height: 96px;
+  overflow: auto;
+  margin: 0 0 16px;
+  padding: 10px;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #b91c1c;
+  font-size: 11px;
+  text-align: left;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.app-crash-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.app-crash-actions button {
+  height: 34px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 9px;
+  background: #1d4ed8;
+  color: #ffffff;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.app-crash-actions button.ghost {
+  background: #eef2f9;
+  color: #1e293b;
+}

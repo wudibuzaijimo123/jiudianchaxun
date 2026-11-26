@@ -1,0 +1,1145 @@
+/* ============ 找工作面板 ============ */
+.job-mode .left-column {
+  width: 100% !important;
+  border-right: none;
+}
+
+.jb-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.jb-search-wrap {
+  position: relative;
+  padding: 8px 14px 0;
+  flex-shrink: 0;
+}
+
+.jb-search-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 8px 0 12px;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
+}
+
+.jb-search-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.jb-search-box input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 13px;
+  color: var(--text-main);
+}
+
+.jb-search-box input::placeholder {
+  color: var(--text-muted);
+}
+
+.jb-locate-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  border: none;
+  background: var(--primary-soft);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.jb-locate-btn:disabled {
+  opacity: 0.6;
+}
+
+.jb-suggest {
+  position: absolute;
+  top: 56px;
+  left: 14px;
+  right: 14px;
+  background: #ffffff;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.16);
+  z-index: 60;
+  overflow: hidden;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.jb-suggest-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 9px 12px;
+  border: none;
+  border-bottom: 1px solid #f1f5f9;
+  background: transparent;
+  text-align: left;
+  font-size: 12.5px;
+  color: var(--text-main);
+  cursor: pointer;
+}
+
+.jb-suggest-item:last-child {
+  border-bottom: none;
+}
+
+.jb-suggest-item svg {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.jb-suggest-name {
+  font-weight: 500;
+  max-width: 46%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.jb-suggest-addr {
+  flex: 1;
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ============ 类型 chips ============ */
+.jb-chip-row {
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex-shrink: 0;
+}
+
+.jb-chip-row::-webkit-scrollbar {
+  display: none;
+}
+
+.jb-chip-row.tight {
+  padding: 0;
+  gap: 6px;
+}
+
+.jb-chip {
+  flex-shrink: 0;
+  padding: 6px 13px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: #ffffff;
+  color: var(--text-sub);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.14s;
+}
+
+.jb-chip.small {
+  padding: 4px 10px;
+  font-size: 11.5px;
+}
+
+.jb-chip.active {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: #ffffff;
+}
+
+.jb-subbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px 6px;
+  flex-shrink: 0;
+}
+
+.jb-filter-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #ffffff;
+  color: var(--text-sub);
+  font-size: 11.5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.jb-filter-toggle svg {
+  transition: transform 0.16s;
+}
+
+.jb-filter-toggle.open svg {
+  transform: rotate(180deg);
+}
+
+.jb-count {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 44%;
+}
+
+.jb-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  border: none;
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-size: 11.5px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.jb-refresh-btn:disabled {
+  opacity: 0.65;
+}
+
+.jb-filter-panel {
+  margin: 2px 14px 8px;
+  padding: 10px 12px;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  flex-shrink: 0;
+}
+
+.jb-filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.jb-filter-label {
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+
+.jb-keyword-box {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: #f8fafc;
+  border: 1px solid var(--border);
+}
+
+.jb-keyword-box input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 12px;
+}
+
+.jb-keyword-box button {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  display: flex;
+  cursor: pointer;
+}
+
+.jb-notice {
+  margin: 0 14px 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--primary-soft);
+  color: var(--primary-dark);
+  font-size: 11.5px;
+  line-height: 1.5;
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  flex-shrink: 0;
+}
+
+.jb-notice svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.jb-notice.warn {
+  background: #fffbeb;
+  color: #92400e;
+}
+
+/* ============ 岗位列表 ============ */
+.jb-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 2px 14px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.jb-card {
+  flex-shrink: 0;
+  background: #ffffff;
+  border-radius: 14px;
+  border: 1.5px solid transparent;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.05);
+  cursor: pointer;
+  overflow: hidden;
+  transition: box-shadow 0.16s, border-color 0.16s;
+}
+
+.jb-card:hover {
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.1);
+  border-color: #dbeafe;
+}
+
+.jb-card-head {
+  display: flex;
+  gap: 10px;
+  padding: 11px 12px 8px;
+}
+
+.jb-logo {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  font-weight: 700;
+  overflow: hidden;
+}
+
+.jb-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.jb-logo-src {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 1px 0;
+  text-align: center;
+  font-size: 8px;
+  font-weight: 500;
+  color: #ffffff;
+  background: rgba(15, 23, 42, 0.5);
+}
+
+/* 详情页图集 */
+.jb-gallery {
+  margin-bottom: 12px;
+}
+
+.jb-gallery-main {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #f1f5f9;
+}
+
+.jb-gallery-main img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.jb-gallery-main.is-map {
+  cursor: pointer;
+}
+
+.jb-gallery-src {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.62);
+  color: #ffffff;
+  font-size: 10px;
+}
+
+.jb-gallery-thumbs {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.jb-gallery-thumbs::-webkit-scrollbar {
+  display: none;
+}
+
+.jb-gallery-thumb {
+  position: relative;
+  width: 62px;
+  height: 48px;
+  flex-shrink: 0;
+  padding: 0;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  overflow: hidden;
+  background: #f1f5f9;
+  cursor: pointer;
+}
+
+.jb-gallery-thumb.active {
+  border-color: #1d4ed8;
+}
+
+.jb-gallery-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.jb-thumb-map-tag {
+  position: absolute;
+  left: 4px;
+  bottom: 4px;
+  width: 16px;
+  height: 16px;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(232, 243, 255, 0.94);
+  color: #1268d6;
+}
+
+.jb-logo.tone-blue {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.jb-logo.tone-green {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.jb-logo.tone-amber {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.jb-logo.tone-violet {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+
+.jb-logo.tone-rose {
+  background: #ffe4e6;
+  color: #be123c;
+}
+
+.jb-logo.tone-cyan {
+  background: #cffafe;
+  color: #0e7490;
+}
+
+.jb-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.jb-title-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.jb-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text-main);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jb-salary {
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #e11d48;
+  white-space: nowrap;
+}
+
+.jb-company-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 11.5px;
+  color: var(--text-sub);
+}
+
+.jb-company {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 62%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jb-type-pill {
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.jb-type-pill.type-兼职 {
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.jb-type-pill.type-实习 {
+  background: #f5f3ff;
+  color: #6d28d9;
+}
+
+.jb-type-pill.type-日结 {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.jb-type-pill.type-钟点工 {
+  background: #fdf2f8;
+  color: #be185d;
+}
+
+.jb-demo-pill {
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 10px;
+}
+
+.jb-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.jb-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+
+.jb-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.jb-tag {
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 10.5px;
+}
+
+.jb-tag.big {
+  padding: 4px 9px;
+  font-size: 11.5px;
+}
+
+.jb-addr-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  color: var(--text-muted);
+  min-width: 0;
+}
+
+.jb-addr-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.jb-distance {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--primary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.jb-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 8px 12px;
+  border-top: 1px dashed #eef2f7;
+  background: #fcfdff;
+  overflow: hidden;
+}
+
+.jb-publish {
+  flex: 1;
+  min-width: 0;
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.jb-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.jb-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 25px;
+  padding: 0 7px;
+  border-radius: 7px;
+  border: none;
+  font-size: 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.jb-btn.boss {
+  background: #00a6a7;
+  color: #ffffff;
+}
+
+.jb-btn.wuba {
+  background: #ff552e;
+  color: #ffffff;
+}
+
+.jb-btn.ghost {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.jb-btn.detail {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+/* ============ 加载 / 空态 / 脚注 ============ */
+.jb-loading,
+.jb-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 48px 24px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.jb-loading p,
+.jb-empty p {
+  font-size: 13px;
+  color: var(--text-sub);
+}
+
+.jb-empty span {
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.jb-loading-sub {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.jb-primary-btn {
+  margin-top: 10px;
+  padding: 9px 18px;
+  border-radius: 10px;
+  border: none;
+  background: var(--primary);
+  color: #ffffff;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.jb-footnote {
+  flex-shrink: 0;
+  display: flex;
+  gap: 5px;
+  align-items: flex-start;
+  padding: 8px 14px 10px;
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  background: #ffffff;
+  border-top: 1px solid var(--border);
+}
+
+.jb-footnote svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* ============ 岗位详情弹层 ============ */
+.jb-sheet-mask {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  max-width: 100vw;
+  box-sizing: border-box;
+  overflow: hidden;
+  background: rgba(15, 23, 42, 0.45);
+  z-index: 90;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: jb-fade 0.18s ease;
+}
+
+.jb-sheet {
+  width: 100%;
+  max-width: 560px;
+  min-width: 0;
+  max-height: 88dvh;
+  background: #ffffff;
+  border-radius: 18px 18px 0 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: jb-slide-up 0.22s ease;
+}
+
+@keyframes jb-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes jb-slide-up {
+  from {
+    transform: translateY(24px);
+    opacity: 0.6;
+  }
+}
+
+.jb-sheet-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.jb-sheet-head h2 {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.jb-sheet-head p {
+  margin-top: 3px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.jb-sheet-close {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: none;
+  background: #f1f5f9;
+  color: var(--text-sub);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.jb-sheet-scroll {
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 12px 16px 16px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.jb-sheet-salary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #fff1f2;
+}
+
+.jb-sheet-salary-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.jb-sheet-salary-main strong {
+  font-size: 21px;
+  font-weight: 700;
+  color: #e11d48;
+  line-height: 1;
+}
+
+.jb-sheet-source {
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+
+.jb-sheet-source.demo {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.jb-facts-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.jb-fact {
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #f8fafc;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.jb-fact-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+
+.jb-fact-value {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-main);
+}
+
+.jb-sheet-block {
+  margin-top: 14px;
+}
+
+.jb-sheet-block h3 {
+  font-size: 12.5px;
+  font-weight: 600;
+  margin-bottom: 7px;
+  color: var(--text-main);
+}
+
+.jb-tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.jb-desc {
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--text-sub);
+}
+
+.jb-sheet-loc {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-main);
+}
+
+.jb-sheet-loc svg {
+  color: var(--text-muted);
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.jb-sheet-loc-sub {
+  margin-top: 5px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.jb-sheet-warn {
+  margin-top: 12px;
+  padding: 9px 11px;
+  border-radius: 10px;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 11.5px;
+  line-height: 1.55;
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.jb-sheet-warn svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.jb-sheet-disclaimer {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 11px;
+  line-height: 1.6;
+  display: flex;
+  gap: 7px;
+  align-items: flex-start;
+}
+
+.jb-sheet-disclaimer svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--text-muted);
+}
+
+.jb-sheet-disclaimer strong {
+  display: block;
+  font-size: 11.5px;
+  color: var(--text-main);
+  margin-bottom: 3px;
+}
+
+.jb-sheet-actions {
+  display: flex;
+  gap: 8px;
+  padding: 10px 16px calc(12px + var(--safe-bottom));
+  border-top: 1px solid var(--border);
+  background: #ffffff;
+  flex-shrink: 0;
+}
+
+.jb-sheet-btn {
+  flex: 1;
+  height: 42px;
+  border-radius: 10px;
+  border: none;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.jb-sheet-btn.boss {
+  background: #00a6a7;
+  color: #ffffff;
+}
+
+.jb-sheet-btn.wuba {
+  background: #ff552e;
+  color: #ffffff;
+}
+
+.jb-sheet-btn.ghost {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+/* ============ 手机扫码 ============ */
+.jb-scan-block {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid #dbeafe;
+  background: #f8fbff;
+}
+
+.jb-scan-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.jb-scan-head strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-main);
+}
+
+.jb-scan-tabs {
+  display: flex;
+  gap: 3px;
+  padding: 2px;
+  border-radius: 8px;
+  background: #e8f1fd;
+}
+
+.jb-scan-tabs button {
+  border: none;
+  background: transparent;
+  color: #1d4ed8;
+  font-size: 10.5px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.jb-scan-tabs button.active {
+  background: #ffffff;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12);
+}
+
+.jb-scan-body {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 9px;
+}
+
+.jb-scan-body img {
+  width: 104px;
+  height: 104px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  background: #ffffff;
+  border: 1px solid var(--border);
+}
+
+.jb-scan-placeholder {
+  width: 104px;
+  height: 104px;
+  flex-shrink: 0;
+  border-radius: 10px;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+
+.jb-scan-body p {
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--text-sub);
+}
+
+@media (max-width: 380px) {
+  .jb-salary {
+    font-size: 12px;
+  }
+
+  .jb-btn {
+    padding: 0 6px;
+  }
+}
+
+/* 常驻距离条 */
+.jb-radius-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  flex-shrink: 0;
+}
+
+.jb-radius-row::-webkit-scrollbar {
+  display: none;
+}
+
+.jb-radius-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  padding-right: 2px;
+}

@@ -1,10 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Crosshair, ExternalLink, Heart, Navigation2, RefreshCw, Star, X } from 'lucide-react';
 import { FALLBACK_HOTEL_PHOTOS } from '../data/demoHotels';
 import { HotelItem, SearchCenter } from '../types/hotel';
 import { calcDistanceMeters, formatDistance } from '../utils/coordTransform';
+import { FALLBACK_CENTER, isValidLngLat } from '../utils/geo';
 
 interface Props {
   center: SearchCenter;
@@ -40,16 +41,40 @@ export const HotelMapView: React.FC<Props> = ({
   const [movedCenter, setMovedCenter] = useState<{ lng: number; lat: number } | null>(null);
   const [previewHotel, setPreviewHotel] = useState<HotelItem | null>(null);
 
+  // 中心点坐标不合法时退回默认点，避免整张地图崩溃
+  const safeCenter = useMemo(
+    () =>
+      isValidLngLat(center?.lng, center?.lat)
+        ? center
+        : { ...center, lng: FALLBACK_CENTER.lng, lat: FALLBACK_CENTER.lat },
+    [center]
+  );
+
+  // 只给坐标有效的酒店打点
+  const mappableHotels = useMemo(
+    () => hotels.filter((h) => isValidLngLat(h.lng, h.lat)),
+    [hotels]
+  );
+
+  // 半径异常（NaN/0/负数）时 Leaflet 的 Circle 会算出 NaN 边界并抛错，这里兜一个默认值
+  const safeRadius = Number.isFinite(radius) && radius > 0 ? radius : 1000;
+
   // 初始化 Leaflet + 高德中文街道瓦片 (GCJ-02 零偏移对齐)
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
-    const map = L.map(containerRef.current, {
-      center: [center.lat, center.lng],
-      zoom: 15,
-      zoomControl: false,
-      attributionControl: true,
-    });
+    let map: L.Map;
+    try {
+      map = L.map(containerRef.current, {
+        center: [safeCenter.lat, safeCenter.lng],
+        zoom: 15,
+        zoomControl: false,
+        attributionControl: true,
+      });
+    } catch {
+      // 容器或坐标异常时不要抛出，宁可这块地图空着
+      return;
+    }
 
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
@@ -66,10 +91,11 @@ export const HotelMapView: React.FC<Props> = ({
 
     markersLayerRef.current = L.layerGroup().addTo(map);
 
+
     map.on('dragend', () => {
       const c = map.getCenter();
-      const movedDist = calcDistanceMeters(center.lng, center.lat, c.lng, c.lat);
-      if (movedDist > 450) {
+      const movedDist = calcDistanceMeters(safeCenter.lng, safeCenter.lat, c.lng, c.lat);
+      if (Number.isFinite(movedDist) && movedDist > 450) {
         setMovedCenter({ lng: Number(c.lng.toFixed(6)), lat: Number(c.lat.toFixed(6)) });
       } else {
         setMovedCenter(null);
@@ -105,8 +131,8 @@ export const HotelMapView: React.FC<Props> = ({
     if (circleRef.current) {
       circleRef.current.remove();
     }
-    circleRef.current = L.circle([center.lat, center.lng], {
-      radius,
+    circleRef.current = L.circle([safeCenter.lat, safeCenter.lng], {
+      radius: safeRadius,
       color: '#2563eb',
       weight: 1.5,
       dashArray: '6 6',
@@ -119,19 +145,26 @@ export const HotelMapView: React.FC<Props> = ({
     }
     const centerIcon = L.divIcon({
       className: 'custom-center-pin-wrap',
-      html: `<div class="center-radar-pin"><span class="pulse-ring"></span><span class="center-dot"></span><div class="center-label">${center.name}</div></div>`,
+      html: `<div class="center-radar-pin"><span class="pulse-ring"></span><span class="center-dot"></span><div class="center-label">${safeCenter.name}</div></div>`,
       iconSize: [28, 28],
       iconAnchor: [14, 14],
     });
-    centerMarkerRef.current = L.marker([center.lat, center.lng], {
+    centerMarkerRef.current = L.marker([safeCenter.lat, safeCenter.lng], {
       icon: centerIcon,
       zIndexOffset: 900,
     }).addTo(map);
 
     const targetZoom =
-      radius <= 500 ? 16 : radius <= 1000 ? 15 : radius <= 2000 ? 14 : radius <= 3000 ? 13 : 12;
-    map.flyTo([center.lat, center.lng], targetZoom, { duration: 0.65 });
-  }, [center.lng, center.lat, center.name, radius]);
+      safeRadius <= 500 ? 16 : safeRadius <= 1000 ? 15 : safeRadius <= 2000 ? 14 : safeRadius <= 3000 ? 13 : 12;
+    // 容器被隐藏（手机端列表视图）时尺寸为 0，flyTo 的动画计算会拿到 NaN 经纬度并抛错，
+    // 这种情况直接用无动画的 setView 定位，等切到地图视图再 invalidateSize 即可。
+    const size = map.getSize();
+    if (size.x > 0 && size.y > 0) {
+      map.flyTo([safeCenter.lat, safeCenter.lng], targetZoom, { duration: 0.65 });
+    } else {
+      map.setView([safeCenter.lat, safeCenter.lng], targetZoom, { animate: false });
+    }
+  }, [safeCenter.lng, safeCenter.lat, safeCenter.name, safeRadius]);
 
   // 渲染酒店价格气泡标记
   useEffect(() => {
@@ -140,7 +173,7 @@ export const HotelMapView: React.FC<Props> = ({
 
     layer.clearLayers();
 
-    hotels.forEach((hotel) => {
+    mappableHotels.forEach((hotel) => {
       const isActive =
         selectedHotel?.id === hotel.id || previewHotel?.id === hotel.id;
       const isFav = favoriteIds.has(hotel.id);
@@ -168,11 +201,11 @@ export const HotelMapView: React.FC<Props> = ({
 
       marker.addTo(layer);
     });
-  }, [hotels, selectedHotel, previewHotel, favoriteIds, onSelectHotel]);
+  }, [mappableHotels, selectedHotel, previewHotel, favoriteIds, onSelectHotel]);
 
   // 当从列表点击选中酒店时，地图平滑居中
   useEffect(() => {
-    if (selectedHotel && mapRef.current) {
+    if (selectedHotel && mapRef.current && isValidLngLat(selectedHotel.lng, selectedHotel.lat)) {
       setPreviewHotel(selectedHotel);
       mapRef.current.panTo([selectedHotel.lat, selectedHotel.lng], { animate: true });
     }
@@ -201,7 +234,7 @@ export const HotelMapView: React.FC<Props> = ({
         type="button"
         className="recenter-map-btn"
         onClick={() => {
-          mapRef.current?.flyTo([center.lat, center.lng], 15, { duration: 0.5 });
+          mapRef.current?.flyTo([safeCenter.lat, safeCenter.lng], 15, { duration: 0.5 });
           setMovedCenter(null);
         }}
         title="回到搜索目标点"

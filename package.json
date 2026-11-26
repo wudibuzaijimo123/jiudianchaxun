@@ -8,9 +8,16 @@
     "dev": "vite --host 0.0.0.0 --port 5173",
     "build": "tsc -b && vite build",
     "start": "node server.mjs",
-    "preview": "vite preview --host 0.0.0.0 --port 4173"
+    "preview": "vite preview --host 0.0.0.0 --port 4173",
+    "ios:add": "cap add ios",
+    "ios:sync": "npm run build && cap sync ios",
+    "ios:open": "cap open ios"
   },
   "dependencies": {
+    "@capacitor/app-launcher": "^8.0.1",
+    "@capacitor/browser": "^8.0.5",
+    "@capacitor/core": "^8.6.3",
+    "@capacitor/ios": "^8.6.3",
     "@types/qrcode": "^1.5.6",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.468.0",
@@ -19,10 +26,12 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.6.3",
     "@types/leaflet": "^1.9.14",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
+    "sharp": "^0.35.5",
     "typescript": "~5.6.2",
     "vite": "^6.0.3"
   }

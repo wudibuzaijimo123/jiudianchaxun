@@ -19,6 +19,7 @@ import {
 import { FALLBACK_HOTEL_PHOTOS } from '../data/demoHotels';
 import { CardRoomRow, HotelItem } from '../types/hotel';
 import { estimateTravelHint, formatDistance } from '../utils/coordTransform';
+import { openExternalUrl } from '../utils/nativeBridge';
 
 interface Props {
   hotel: HotelItem;
@@ -208,7 +209,7 @@ export const HotelCard: React.FC<Props> = ({
                       onClick={(e) => {
                         if (rm.bookUrl) {
                           e.stopPropagation();
-                          window.open(rm.bookUrl, '_blank', 'noopener,noreferrer');
+                          void openExternalUrl(rm.bookUrl);
                         } else {
                           onQuickPlatformJump(hotel, 'meituan', e);
                         }

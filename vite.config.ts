@@ -118,7 +118,8 @@ function extractJsonFromLlmText(rawText: string): any {
 async function callOpenAiCompatibleLlm(
   llm: { apiKey: string; baseUrl?: string; model?: string },
   prompt: string,
-  maxTokens = 1400
+  maxTokens = 1400,
+  systemPrompt = '你是中国本地酒店房价检索与数据分析引擎。只输出合法的纯 JSON，不要输出任何 Markdown 解释文字。'
 ): Promise<string> {
   const cleanBase = String(llm.baseUrl || 'https://api.deepseek.com/v1').replace(/\/+$/, '');
   const endpoint = cleanBase.endsWith('/chat/completions')
@@ -136,8 +137,7 @@ async function callOpenAiCompatibleLlm(
       messages: [
         {
           role: 'system',
-          content:
-            '你是中国本地酒店房价检索与数据分析引擎。只输出合法的纯 JSON，不要输出任何 Markdown 解释文字。',
+          content: systemPrompt,
         },
         { role: 'user', content: prompt },
       ],
@@ -633,6 +633,222 @@ ${snippetContext || '暂无直接网页正文，请结合该门店品牌/地段�
         }
       });
 
+      // 6. AI 周边租房房源检索（安居客式：户型/面积/月租/押付方式）
+      server.middlewares.use('/api/ai-rentals', async (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405;
+          res.end(JSON.stringify({ error: 'Method Not Allowed' }));
+          return;
+        }
+        try {
+          const body = await readJsonBody(req);
+          const { llm, serpApiKey = '', city = '', centerName = '', radius = 3000, maxRent, count = 12 } = body || {};
+          if (!llm?.apiKey) {
+            res.statusCode = 400;
+            res.setHeader('Content-Type', 'application/json; charset=utf-8');
+            res.end(JSON.stringify({ error: '缺少大模型 Key' }));
+            return;
+          }
+
+          const cleanCity = String(city).replace(/市$/, '');
+          const cacheKey = `rentals:${cleanCity}:${centerName}:${radius}:${maxRent || ''}`;
+          const cached = getCached(cacheKey);
+          if (cached) {
+            res.statusCode = 200;
+            res.setHeader('Content-Type', 'application/json; charset=utf-8');
+            res.end(cached.body);
+            return;
+          }
+
+          const snippets = serpApiKey
+            ? await searchCnWebSnippets(
+                `${cleanCity} ${centerName} 租房 (安居客 OR 58同城 OR 贝壳) 月租 整租 合租 单间`,
+                serpApiKey
+              )
+            : [];
+          const evidence = snippets
+            .slice(0, 8)
+            .map((s: any, i: number) => `[${i + 1}] ${s.title || ''}：${s.snippet || ''}`)
+            .join('\n');
+
+          const prompt = `请检索「${cleanCity} ${centerName}」周边 ${
+            radius >= 1000 ? `${Math.round(radius / 1000)}km` : `${radius}m`
+          } 范围内真实可租房源信息（参照安居客/58同城/贝壳该地段挂牌特征），输出约 ${count} 条。
+要求：优先真实存在的小区/公寓/自建房/城中村；租金符合该城市该地段行情${maxRent ? `，月租尽量不超过 ${maxRent} 元` : ''}；
+类型包含整租/合租/单间/床位/日租；不要编造房东手机号；距离为合理估算米数。
+${evidence ? `\n公开检索摘要（仅作行情参考）：\n${evidence}\n` : ''}
+严格只返回 JSON 数组，每项字段：
+{"title":"整租·阳光花园 2室1厅","community":"阳光花园","district":"城关区","address":"建设路88号","kind":"整租","layout":"2室1厅1卫","area":89,"floor":"中楼层/18层","orientation":"南","decoration":"精装","rentMonthly":1800,"rentDaily":null,"payMethod":"押一付三","minLease":"一年起租","tags":["近地铁","有电梯"],"facilities":["空调","洗衣机","热水器","宽带","独卫"],"distanceMeters":420,"basis":"该地段挂牌行情","riskNote":"合租需确认是否独卫"}`;
+
+          const rawReply = await callOpenAiCompatibleLlm(
+            llm,
+            prompt,
+            3200,
+            '你是中国本地租房房源检索引擎，熟悉安居客/58同城/贝壳的挂牌数据结构。只输出合法的纯 JSON 数组，不要输出任何解释文字。'
+          );
+          const parsed = extractJsonFromLlmText(rawReply);
+          if (!Array.isArray(parsed)) {
+            res.statusCode = 500;
+            res.setHeader('Content-Type', 'application/json; charset=utf-8');
+            res.end(JSON.stringify({ error: 'AI 房源 JSON 解析失败' }));
+            return;
+          }
+
+          const payload = JSON.stringify({
+            listings: parsed.slice(0, 20),
+            notice: snippets.length > 0 ? `已参考 ${snippets.length} 条公开挂牌摘要` : '',
+          });
+          apiCache.set(cacheKey, {
+            status: 200,
+            body: payload,
+            expiresAt: Date.now() + CACHE_TTL_MS,
+          });
+
+          res.statusCode = 200;
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+          res.end(payload);
+        } catch (err: any) {
+          res.statusCode = 502;
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+          res.end(JSON.stringify({ error: err?.message || 'AI 房源检索失败' }));
+        }
+      });
+
+      // 周边招聘岗位（开发环境与 server.mjs 保持同一套提示词）
+      server.middlewares.use('/api/ai-jobs', async (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405;
+          res.end(JSON.stringify({ error: 'Method Not Allowed' }));
+          return;
+        }
+        try {
+          const body = await readJsonBody(req);
+          const {
+            llm,
+            serpApiKey = '',
+            city = '',
+            centerName = '',
+            radius = 3000,
+            count = 12,
+          } = body || {};
+          if (!llm?.apiKey) {
+            res.statusCode = 400;
+            res.setHeader('Content-Type', 'application/json; charset=utf-8');
+            res.end(JSON.stringify({ error: '缺少大模型 Key' }));
+            return;
+          }
+
+          const cleanCity = String(city).replace(/市$/, '');
+          const cacheKey = `jobs:${cleanCity}:${centerName}:${radius}`;
+          const cached = getCached(cacheKey);
+          if (cached) {
+            res.statusCode = 200;
+            res.setHeader('Content-Type', 'application/json; charset=utf-8');
+            res.end(cached.body);
+            return;
+          }
+
+          const snippets = serpApiKey
+            ? await searchCnWebSnippets(
+                `${cleanCity} ${centerName} 招聘 (BOSS直聘 OR 58同城 OR 智联招聘) 工资 服务员 店员`,
+                serpApiKey
+              )
+            : [];
+          const evidence = snippets
+            .slice(0, 8)
+            .map((s: any, i: number) => `[${i + 1}] ${s.title || ''}：${s.snippet || ''}`)
+            .join('\n');
+
+          const prompt = `请检索「${cleanCity} ${centerName}」周边 ${
+            radius >= 1000 ? `${Math.round(radius / 1000)}km` : `${radius}m`
+          } 范围内真实在招岗位（参照 BOSS直聘/58同城/智联招聘该地段门店与小微企业招聘特征），输出约 ${count} 条。
+要求：以餐饮、酒店、超市、快递物流、家政、门店导购、工厂普工、外卖骑手等小城常见岗位为主，不要编造大厂高薪岗位；
+薪资符合该城市该地段行情并注明单位（元/月、元/天、元/时）；类型覆盖全职/兼职/日结/钟点工；不要编造 HR 手机号或微信号；距离用合理估算米数。
+${evidence ? `\n公开检索摘要（仅作行情参考）：\n${evidence}\n` : ''}
+严格只返回 JSON 数组，每项字段：
+{"title":"餐厅服务员","company":"老城火锅店","salaryText":"3200-4000元/月","salaryMin":3200,"salaryMax":4000,"salaryUnit":"月","type":"全职","experience":"经验不限","education":"学历不限","headcount":2,"district":"城关区","address":"建设路12号","distanceMeters":380,"tags":["包吃","月休4天","有提成"],"description":"负责点单、上菜、餐前准备。","publishText":"今天发布"}`;
+
+          const rawReply = await callOpenAiCompatibleLlm(
+            llm,
+            prompt,
+            3200,
+            '你是中国本地招聘信息检索引擎，熟悉 BOSS直聘/58同城/智联招聘的岗位数据结构。只输出合法的纯 JSON 数组，不要输出任何解释文字。'
+          );
+          const parsed = extractJsonFromLlmText(rawReply);
+          if (!Array.isArray(parsed)) {
+            res.statusCode = 500;
+            res.setHeader('Content-Type', 'application/json; charset=utf-8');
+            res.end(JSON.stringify({ error: 'AI 岗位 JSON 解析失败' }));
+            return;
+          }
+
+          const payload = JSON.stringify({
+            jobs: parsed.slice(0, 20),
+            notice: snippets.length > 0 ? `已参考 ${snippets.length} 条公开招聘摘要` : '',
+          });
+          apiCache.set(cacheKey, {
+            status: 200,
+            body: payload,
+            expiresAt: Date.now() + CACHE_TTL_MS,
+          });
+
+          res.statusCode = 200;
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+          res.end(payload);
+        } catch (err: any) {
+          res.statusCode = 502;
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+          res.end(JSON.stringify({ error: err?.message || 'AI 招聘检索失败' }));
+        }
+      });
+
+      // 高德图床代理（开发环境与 server.mjs 行为一致）
+      server.middlewares.use('/api/img-proxy', async (req, res) => {
+        try {
+          const u = new URL(req.url || '/', 'http://127.0.0.1');
+          const target = u.searchParams.get('url') || '';
+          if (!/^https?:\/\/([a-z0-9-]+\.)+(autonavi|amap)\.com\//i.test(target)) {
+            res.statusCode = 400;
+            res.setHeader('Content-Type', 'application/json; charset=utf-8');
+            res.end(JSON.stringify({ error: '仅支持高德图床地址' }));
+            return;
+          }
+
+          const candidates = Array.from(
+            new Set([
+              target,
+              target.replace(/^http:\/\//i, 'https://'),
+              target.replace(/^https:\/\//i, 'http://'),
+            ])
+          );
+
+          for (const url of candidates) {
+            try {
+              const upstream = await fetch(url, {
+                headers: { Referer: 'https://www.amap.com/', 'User-Agent': 'Mozilla/5.0' },
+              });
+              if (!upstream.ok) continue;
+              const buf = Buffer.from(await upstream.arrayBuffer());
+              res.statusCode = 200;
+              res.setHeader('Content-Type', upstream.headers.get('content-type') || 'image/jpeg');
+              res.setHeader('Cache-Control', 'public, max-age=86400');
+              res.end(buf);
+              return;
+            } catch {
+              // 换协议重试
+            }
+          }
+
+          res.statusCode = 502;
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+          res.end(JSON.stringify({ error: '高德图片拉取失败' }));
+        } catch (err: any) {
+          res.statusCode = 500;
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+          res.end(JSON.stringify({ error: err?.message || '图片代理失败' }));
+        }
+      });
+
       // 6. 精准定位美团酒店具体门店购买详情页 (https://hotel.meituan.com/<poiId>/)
       server.middlewares.use('/api/meituan-url', async (req, res) => {
         try {
@@ -764,5 +980,9 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 5173,
     strictPort: true,
+    // 排除截图/浏览器缓存目录：无头浏览器会锁住 cache.db，watcher 遇到 EBUSY 会让 dev server 直接退出
+    watch: {
+      ignored: ['**/.tmp-shots/**', '**/.shots/**', '**/*.log'],
+    },
   },
 });

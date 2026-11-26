@@ -1,7 +1,7 @@
 {
-  "name": "附近住哪儿 · 周边酒店住宿雷达",
-  "short_name": "附近住哪儿",
-  "description": "输入任意地点查询附近酒店位置、评分与参考起步价，一键跳转美团、抖音、携程与Apple地图查看实时房态",
+  "name": "附近查一查 · 酒店租房招聘雷达",
+  "short_name": "附近查一查",
+  "description": "输入任意地点，查周边酒店房价与空房、租房房源与租金、附近在招岗位，一键跳转美团、携程、安居客、BOSS直聘与高德地图",
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait",

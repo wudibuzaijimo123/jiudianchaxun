@@ -27,3 +27,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+
+# 本地截图 / 无头浏览器临时目录
+.tmp-shots/
+.shots/

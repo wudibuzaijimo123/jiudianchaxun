@@ -1,9 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  BedDouble,
   Bot,
+  Briefcase,
   Clock,
   Compass,
   Heart,
+  Home,
   Info,
   List,
   Loader2,
@@ -17,7 +20,9 @@ import {
 import { HotelCard } from './components/HotelCard';
 import { HotelDetailSheet } from './components/HotelDetailSheet';
 import { HotelMapView } from './components/HotelMapView';
+import { JobPanel } from './components/JobPanel';
 import { MeituanBuyModal } from './components/MeituanBuyModal';
+import { RentalPanel } from './components/RentalPanel';
 import { SearchAndFilterBar } from './components/SearchAndFilterBar';
 import { SettingsAndGuideModal } from './components/SettingsAndGuideModal';
 import {
@@ -39,6 +44,7 @@ import {
   SearchHistoryItem,
 } from './types/hotel';
 import { wgs84ToGcj02 } from './utils/coordTransform';
+import { openExternalUrl } from './utils/nativeBridge';
 import {
   buildExactStoreQuery,
   buildPlatformLinks,
@@ -66,6 +72,8 @@ import './App.css';
 
 type ActiveTab = 'explore' | 'favorites' | 'history';
 type MobileViewMode = 'list' | 'map';
+/** 住宿（酒店宾馆）与 租房（房源）两种结果形态 */
+type AppMode = 'stay' | 'rent' | 'job';
 
 function getTodayAndTomorrow(): [string, string] {
   const now = new Date();
@@ -107,6 +115,11 @@ export const App: React.FC = () => {
   const [locating, setLocating] = useState<boolean>(false);
 
   const [activeTab, setActiveTab] = useState<ActiveTab>('explore');
+  // 支持 ?mode=rent / ?mode=job 直达对应模式（扫码或分享链接时有用）
+  const [appMode, setAppMode] = useState<AppMode>(() => {
+    const m = new URLSearchParams(window.location.search).get('mode');
+    return m === 'rent' || m === 'job' ? m : 'stay';
+  });
   const [mobileView, setMobileView] = useState<MobileViewMode>('list');
   const [selectedHotel, setSelectedHotel] = useState<HotelItem | null>(null);
   const [detailHotel, setDetailHotel] = useState<HotelItem | null>(null);
@@ -146,13 +159,13 @@ export const App: React.FC = () => {
             setDetailHotel(h);
             const links = buildPlatformLinks(h);
             showToast(`已锁定同店：${buildExactStoreQuery(h)}`);
-            window.location.href = links.meituanApp;
+            void openExternalUrl(links.meituanApp);
           }
         })
         .catch(() => {});
     } else if (gomt) {
       window.history.replaceState(null, '', window.location.pathname);
-      window.location.href = `imeituan://www.meituan.com/search?q=${encodeURIComponent(gomt)}`;
+      void openExternalUrl(`imeituan://www.meituan.com/search?q=${encodeURIComponent(gomt)}`);
     }
 
     if (window.location.hostname !== 'localhost' && !loadAmapKey()) {
@@ -525,8 +538,8 @@ export const App: React.FC = () => {
         <div className="brand-area">
           <div className="brand-logo">住</div>
           <div>
-            <h1>附近住哪儿</h1>
-            <p className="brand-sub">高德周边雷达 + 实时空房与各房型报价直连</p>
+            <h1>附近查一查</h1>
+            <p className="brand-sub">酒店 · 租房 · 招聘，周边一图查</p>
           </div>
         </div>
 
@@ -561,9 +574,71 @@ export const App: React.FC = () => {
       </header>
 
       {activeTab === 'explore' && (
-        <main className="explore-workspace">
-          <section className={`left-column ${mobileView === 'map' ? 'hide-on-mobile' : ''}`}>
-            <SearchAndFilterBar
+        <main
+          className={`explore-workspace ${appMode === 'rent' ? 'rent-mode' : ''} ${
+            appMode === 'job' ? 'job-mode' : ''
+          }`}
+        >
+          <section
+            className={`left-column ${
+              appMode === 'rent' || appMode === 'job'
+                ? ''
+                : mobileView === 'map'
+                ? 'hide-on-mobile'
+                : ''
+            }`}
+          >
+            <div className="app-mode-switch">
+              <button
+                type="button"
+                className={`ams-btn ${appMode === 'stay' ? 'active' : ''}`}
+                onClick={() => setAppMode('stay')}
+              >
+                <BedDouble size={14} /> 住酒店
+              </button>
+              <button
+                type="button"
+                className={`ams-btn ${appMode === 'rent' ? 'active' : ''}`}
+                onClick={() => setAppMode('rent')}
+              >
+                <Home size={14} /> 租房源
+              </button>
+              <button
+                type="button"
+                className={`ams-btn ${appMode === 'job' ? 'active' : ''}`}
+                onClick={() => setAppMode('job')}
+              >
+                <Briefcase size={14} /> 找工作
+              </button>
+            </div>
+
+            {appMode === 'job' ? (
+              <JobPanel
+                center={center}
+                amapKey={amapKey}
+                llmConfig={llmConfig}
+                serpApiKey={serpApiKey}
+                serverBaseUrl={serverBaseUrl}
+                locating={locating}
+                onSelectCenter={handleSelectCenter}
+                onLocateMe={handleLocateMe}
+                onToast={showToast}
+              />
+            ) : appMode === 'rent' ? (
+              <RentalPanel
+                center={center}
+                amapKey={amapKey}
+                llmConfig={llmConfig}
+                serpApiKey={serpApiKey}
+                serverBaseUrl={serverBaseUrl}
+                locating={locating}
+                onSelectCenter={handleSelectCenter}
+                onLocateMe={handleLocateMe}
+                onToast={showToast}
+              />
+            ) : (
+              <>
+                <SearchAndFilterBar
               center={center}
               amapKey={amapKey}
               filters={filters}
@@ -706,8 +781,12 @@ export const App: React.FC = () => {
                 ))
               )}
             </div>
+              </>
+            )}
           </section>
 
+          {appMode === 'stay' && (
+            <>
           <section className={`right-map-column ${mobileView === 'list' ? 'hide-on-mobile' : ''}`}>
             {mobileView === 'map' && (
               <div className="mobile-map-top-overlay">
@@ -776,6 +855,8 @@ export const App: React.FC = () => {
               </>
             )}
           </button>
+            </>
+          )}
         </main>
       )}
 

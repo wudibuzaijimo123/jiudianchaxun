@@ -1,6 +1,6 @@
 import { LlmConfig } from '../types/hotel';
 
-function extractJsonFromText(rawText: string): any {
+export function extractJsonFromText(rawText: string): any {
   const cleaned = rawText
     .replace(/<think>[\s\S]*?<\/think>/gi, '')
     .replace(/```json/gi, '')

@@ -152,7 +152,13 @@ export function loadLastCenter(): SearchCenter {
     const raw = localStorage.getItem(KEY_LAST_CENTER);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (parsed && typeof parsed.lng === 'number' && typeof parsed.lat === 'number') {
+      if (
+        parsed &&
+        Number.isFinite(parsed.lng) &&
+        Number.isFinite(parsed.lat) &&
+        Math.abs(parsed.lat) <= 90 &&
+        Math.abs(parsed.lng) <= 180
+      ) {
         return parsed;
       }
     }

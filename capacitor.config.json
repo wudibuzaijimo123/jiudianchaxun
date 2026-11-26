@@ -1,6 +1,6 @@
 {
   "appId": "com.jiudianchaxun.radar",
-  "appName": "附近住哪儿",
+  "appName": "附近查一查",
   "webDir": "dist",
   "bundledWebRuntime": false,
   "ios": {

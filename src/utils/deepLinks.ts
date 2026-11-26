@@ -1,4 +1,5 @@
 import { HotelItem } from '../types/hotel';
+import { openAppOrWeb, openExternalUrl } from './nativeBridge';
 
 export function isMobileDevice(): boolean {
   if (typeof navigator === 'undefined') return false;
@@ -108,12 +109,16 @@ export async function launchMeituanPurchase(
 
   if (isMobileDevice()) {
     onToast?.(`正在唤起美团 App 锁定「${exactQuery}」`);
-    window.location.href = links.meituanApp;
+    const opened = await openExternalUrl(links.meituanApp);
+    if (!opened) {
+      onToast?.('未检测到美团 App，店名已复制，可到浏览器粘贴搜索');
+      await openExternalUrl(links.ctripWeb);
+    }
     return;
   }
 
   onToast?.(`已复制精准店名「${exactQuery}」`);
-  window.open(links.ctripWeb, '_blank', 'noopener,noreferrer');
+  await openExternalUrl(links.ctripWeb);
 }
 
 export async function smartLaunchPlatform(
@@ -133,46 +138,46 @@ export async function smartLaunchPlatform(
 
   if (platform === 'amap_detail') {
     onToast?.(`正在打开「${hotel.name}」高德唯一门店ID比价页`);
-    window.open(mobile ? links.amapPoiApp : links.amapDetail, '_blank', 'noopener,noreferrer');
+    await openExternalUrl(mobile ? links.amapPoiApp : links.amapDetail);
     return;
   }
 
   if (platform === 'douyin') {
     if (mobile) {
       onToast?.(`正在唤起抖音锁定「${exactQuery}」`);
-      window.location.href = links.douyinApp;
+      await openAppOrWeb(links.douyinApp, links.douyinWeb);
     } else {
       onToast?.(`正在打开抖音网页版查看「${exactQuery}」`);
-      window.open(links.douyinWeb, '_blank', 'noopener,noreferrer');
+      await openExternalUrl(links.douyinWeb);
     }
     return;
   }
 
   if (platform === 'ctrip') {
     onToast?.(`正在打开携程精准查找「${exactQuery}」`);
-    window.open(links.ctripWeb, '_blank', 'noopener,noreferrer');
+    await openExternalUrl(links.ctripWeb);
     return;
   }
 
   if (platform === 'baidu') {
     onToast?.(`正在打开百度地图定位「${hotel.name}」`);
-    window.open(links.baiduNav, '_blank', 'noopener,noreferrer');
+    await openExternalUrl(links.baiduNav);
     return;
   }
 
   if (platform === 'apple') {
     if (!isAppleDevice()) {
       onToast?.('苹果网页版不支持中国大陆定位，已自动切换高德精准定位');
-      window.open(links.amapNav, '_blank', 'noopener,noreferrer');
+      await openExternalUrl(links.amapNav);
       return;
     }
     onToast?.(`正在唤起 Apple 地图定位「${hotel.name}」`);
-    window.open(links.appleMaps, '_blank', 'noopener,noreferrer');
+    await openExternalUrl(links.appleMaps);
     return;
   }
 
   if (platform === 'amap') {
     onToast?.(`正在打开高德地图路线规划`);
-    window.open(links.amapNav, '_blank', 'noopener,noreferrer');
+    await openExternalUrl(links.amapNav);
   }
 }
