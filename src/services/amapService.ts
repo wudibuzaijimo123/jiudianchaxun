@@ -480,6 +480,36 @@ async function fetchLiveHotelInventory(
       const availability: AvailabilityStatus = hasLiveRate ? 'available' : 'sold_out';
       const offers = parseSerpOffers(prop);
 
+      // 构建直接在卡片正面展示的实时客房情况行
+      const liveCardRooms: { name: string; status: string; price: number; isLive?: boolean }[] = [];
+      for (const off of offers) {
+        for (const rm of off.rooms) {
+          if (liveCardRooms.length < 3) {
+            liveCardRooms.push({
+              name: `${rm.name} (${off.source})`,
+              status: '实时有房',
+              price: rm.nightlyPrice,
+              isLive: true,
+            });
+          }
+        }
+      }
+      if (liveCardRooms.length === 0 && offers.length > 0) {
+        offers.slice(0, 2).forEach((off) => {
+          liveCardRooms.push({
+            name: `${off.source} 标准客房`,
+            status: '实时有空房',
+            price: off.nightlyPrice,
+            isLive: true,
+          });
+        });
+      } else if (liveCardRooms.length === 0 && hasLiveRate) {
+        liveCardRooms.push(
+          { name: '标准大床房', status: '实时有空房', price: Math.round(lowestNightly), isLive: true },
+          { name: '标准双床房', status: '实时有空房', price: Math.round(lowestNightly * 1.15), isLive: true }
+        );
+      }
+
       const photos: string[] = Array.isArray(prop.images)
         ? prop.images
             .map((img: any) => asStr(img.original_image || img.thumbnail))
@@ -511,6 +541,7 @@ async function fetchLiveHotelInventory(
         availability,
         propertyToken: asStr(prop.property_token) || undefined,
         otaOffers: offers,
+        cardRooms: liveCardRooms,
         phones: [],
         photos: photos.length > 0 ? photos : FALLBACK_HOTEL_PHOTOS[cls.category],
         tags: amenities,
@@ -777,6 +808,7 @@ export async function searchNearbyHotels(
           availability: lh.availability,
           propertyToken: lh.propertyToken,
           otaOffers: lh.otaOffers,
+          cardRooms: lh.cardRooms,
           rating: ah.rating ?? lh.rating,
           reviewCount: lh.reviewCount,
           source: 'amap_live' as const,

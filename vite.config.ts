@@ -434,19 +434,22 @@ ${mergedSnippets || '（当前区域个体门店公开网页较少，请结合�
 【待定价酒店清单】：
 ${hotelListText}
 
-请严格返回一个 JSON 数组，包含每一家店的定价对象（不要遗漏任何 id），格式如下：
+请严格返回一个 JSON 数组，包含每一家店的定价与客房情况对象（不要遗漏任何 id），格式如下：
 [
   {
     "id": "原样返回酒店id",
     "minPrice": 89,
     "priceRange": "¥79-119",
-    "roomBrief": "单人/大床房 ¥89 · 双床房 ¥109",
-    "vacancyHint": "有房可订",
-    "basis": "全网检索挂牌"
+    "vacancyHint": "今日有空房",
+    "basis": "全网检索挂牌",
+    "rooms": [
+      { "name": "特惠大床房", "status": "有房", "price": 89 },
+      { "name": "标准双床房", "status": "有房", "price": 109 }
+    ]
   }
 ]
 要求：
-1. minPrice 必须是贴合实际的纯整数（人民币元），村镇/高校门口个体小宾馆/公寓通常在 65~135 元之间，经济连锁（汉庭/如家/格林豪泰/尚客优等）通常在 129~229 元，中高端（全季/亚朵/维也纳）通常在 259~459 元；若上方网页摘要中有明确价格则优先采用网页实价并将 basis 设为 "全网检索实价"，否则将 basis 设为 "AI同地段行情"。
+1. minPrice 和 rooms[].price 必须是贴合实际的纯整数（人民币元），每家店返回 2 个主力房型（如大床房、双床房或单人间）；村镇/高校门口个体小宾馆通常在 65~135 元，经济连锁在 129~229 元，中高端在 259~459 元；若网页摘要有明确价格优先采用网页实价。
 2. 只输出纯 JSON 数组！`;
 
           const rawReply = await callOpenAiCompatibleLlm(llm, prompt, 1600);
@@ -579,6 +582,83 @@ ${snippetContext || '暂无直接网页正文，请结合该门店品牌/地段�
           res.statusCode = 502;
           res.setHeader('Content-Type', 'application/json; charset=utf-8');
           res.end(JSON.stringify({ error: err?.message || 'AI 房型检索失败' }));
+        }
+      });
+
+      // 6. 精准定位美团酒店具体门店购买详情页 (https://hotel.meituan.com/<poiId>/)
+      server.middlewares.use('/api/meituan-url', async (req, res) => {
+        try {
+          const reqUrl = new URL(req.url || '', 'http://localhost');
+          const apiKey = (reqUrl.searchParams.get('api_key') || '').trim();
+          const hotel = (reqUrl.searchParams.get('hotel') || '').trim();
+          const city = (reqUrl.searchParams.get('city') || '').replace(/市$/, '').trim();
+
+          const fallbackUrl = 'https://hotel.meituan.com/';
+          if (!hotel || !apiKey) {
+            res.statusCode = 200;
+            res.setHeader('Content-Type', 'application/json; charset=utf-8');
+            res.end(JSON.stringify({ url: fallbackUrl, matched: false }));
+            return;
+          }
+
+          const cacheKey = `mt_url:${city}:${hotel}`;
+          const cached = getCached(cacheKey);
+          if (cached) {
+            res.statusCode = 200;
+            res.setHeader('Content-Type', 'application/json; charset=utf-8');
+            res.end(cached.body);
+            return;
+          }
+
+          const cleanName = hotel.replace(/[（(].*?[)）]/g, '').trim() || hotel;
+          const results = await searchCnWebSnippets(
+            `${city} "${cleanName}" (site:hotel.meituan.com OR site:meituan.com/jiudian)`,
+            apiKey
+          );
+
+          let directUrl = '';
+          for (const item of results) {
+            const link = String(item.link || '');
+            const idMatch = link.match(/(?:hotel\.meituan\.com|meituan\.com\/jiudian)\/(\d{5,15})/);
+            if (idMatch && idMatch[1]) {
+              directUrl = `https://hotel.meituan.com/${idMatch[1]}/`;
+              break;
+            }
+          }
+
+          if (!directUrl) {
+            const broadResults = await searchCnWebSnippets(
+              `${city} ${hotel} 美团酒店 预订 site:meituan.com`,
+              apiKey
+            );
+            for (const item of broadResults) {
+              const link = String(item.link || '');
+              const idMatch = link.match(/(?:hotel\.meituan\.com|meituan\.com\/jiudian)\/(\d{5,15})/);
+              if (idMatch && idMatch[1]) {
+                directUrl = `https://hotel.meituan.com/${idMatch[1]}/`;
+                break;
+              }
+            }
+          }
+
+          const payload = JSON.stringify({
+            url: directUrl || fallbackUrl,
+            matched: Boolean(directUrl),
+          });
+
+          apiCache.set(cacheKey, {
+            status: 200,
+            body: payload,
+            expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+          });
+
+          res.statusCode = 200;
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+          res.end(payload);
+        } catch {
+          res.statusCode = 200;
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+          res.end(JSON.stringify({ url: 'https://hotel.meituan.com/', matched: false }));
         }
       });
     },

@@ -2953,3 +2953,162 @@ input {
   color: #ffffff;
   border-color: #6d28d9;
 }
+
+
+/* ========== 卡片内嵌实时客房情况表 & 美团直达购买横幅样式 ========== */
+.phone-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: #047857;
+  font-weight: 600;
+}
+
+.card-rooms-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  padding: 5px 8px;
+  margin-top: 2px;
+}
+
+.card-room-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 11.5px;
+}
+
+.cr-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-main);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cr-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.cr-status {
+  font-size: 10px;
+  font-weight: 700;
+  background: #dcfce7;
+  color: #15803d;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.cr-status.live {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.cr-price {
+  color: var(--price);
+  font-size: 12.5px;
+  font-weight: 800;
+}
+
+.card-rooms-loading {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: #6d28d9;
+  background: #faf5ff;
+  border: 1px dashed #d8b4fe;
+  padding: 5px 8px;
+  border-radius: 7px;
+}
+
+.meituan-buy-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: linear-gradient(135deg, #fffbeb, #fef3c7);
+  border: 1.5px solid #fbbf24;
+  border-radius: 14px;
+  padding: 11px 13px;
+}
+
+.mt-buy-left {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+
+.mt-buy-primary-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: none;
+  background: #ffd000;
+  color: #1c1917;
+  font-size: 14.5px;
+  font-weight: 800;
+  padding: 10px 16px;
+  border-radius: 10px;
+  cursor: pointer;
+  box-shadow: 0 3px 10px rgba(245, 158, 11, 0.28);
+}
+
+.mt-buy-primary-btn:hover {
+  background: #facc15;
+}
+
+.mt-buy-sub {
+  font-size: 11px;
+  color: #92400e;
+  line-height: 1.4;
+}
+
+.mt-qr-mini {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  background: #ffffff;
+  padding: 5px;
+  border-radius: 9px;
+  border: 1px solid #fde68a;
+  flex-shrink: 0;
+}
+
+.mt-qr-mini img {
+  width: 72px;
+  height: 72px;
+  display: block;
+}
+
+.mt-qr-mini span {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: #92400e;
+}
+
+.mini-mt-buy {
+  margin-top: 3px;
+  border: none;
+  background: #ffd000;
+  color: #1c1917;
+  font-size: 10.5px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+}

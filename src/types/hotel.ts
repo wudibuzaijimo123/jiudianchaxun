@@ -45,6 +45,13 @@ export interface RoomHint {
   estPrice: number;
 }
 
+export interface CardRoomRow {
+  name: string;
+  status: string;
+  price: number;
+  isLive?: boolean;
+}
+
 export interface HotelItem {
   id: string;
   name: string;
@@ -70,6 +77,8 @@ export interface HotelItem {
   aiPriceRange?: string;
   aiRoomBrief?: string;
   aiBasis?: string;
+  /** 直接展示在列表卡片正面的实时客房情况明细行 */
+  cardRooms?: CardRoomRow[];
   /** 今日空房状态 */
   availability: AvailabilityStatus;
   /** SerpApi Google Hotels property_token（用于点开详情直接拉取实时细分空房房型） */

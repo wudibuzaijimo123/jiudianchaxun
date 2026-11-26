@@ -207,13 +207,26 @@ export const App: React.FC = () => {
                 const hit = priceMap.get(item.id);
                 if (!hit) return item;
                 if (!forceAll && item.minPrice !== null) return item;
+                const aiRooms = Array.isArray(hit.rooms)
+                  ? hit.rooms
+                      .filter((rm: any) => rm?.name && Number(rm?.price) > 0)
+                      .map((rm: any) => ({
+                        name: String(rm.name),
+                        status: String(rm.status || '有房'),
+                        price: Math.round(Number(rm.price)),
+                        isLive: false,
+                      }))
+                  : undefined;
+
                 return {
                   ...item,
                   minPrice: Math.round(Number(hit.minPrice)),
                   priceSource: 'ai_search',
+                  availability: item.availability === 'unknown' ? 'available' : item.availability,
                   aiPriceRange: hit.priceRange ? String(hit.priceRange) : undefined,
                   aiRoomBrief: hit.roomBrief ? String(hit.roomBrief) : undefined,
                   aiBasis: hit.basis ? String(hit.basis) : 'AI全网搜价',
+                  cardRooms: aiRooms && aiRooms.length > 0 ? aiRooms : item.cardRooms,
                 };
               })
             );
@@ -565,6 +578,7 @@ export const App: React.FC = () => {
                     hotel={hotel}
                     isFavorite={favoriteIds.has(hotel.id)}
                     isSelected={selectedHotel?.id === hotel.id}
+                    aiLoading={aiPricingLoading}
                     onSelect={(h) => {
                       setSelectedHotel(h);
                       setDetailHotel(h);
@@ -572,7 +586,7 @@ export const App: React.FC = () => {
                     onToggleFavorite={handleToggleFavorite}
                     onQuickPlatformJump={(h, plat, e) => {
                       e.stopPropagation();
-                      smartLaunchPlatform(h, plat, showToast);
+                      smartLaunchPlatform(h, plat, showToast, serpApiKey);
                     }}
                   />
                 ))
@@ -682,7 +696,7 @@ export const App: React.FC = () => {
                   onToggleFavorite={handleToggleFavorite}
                   onQuickPlatformJump={(h, plat, e) => {
                     e.stopPropagation();
-                    smartLaunchPlatform(h, plat, showToast);
+                    smartLaunchPlatform(h, plat, showToast, serpApiKey);
                   }}
                 />
               ))}

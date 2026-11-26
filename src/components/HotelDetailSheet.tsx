@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import QRCode from 'qrcode';
 import {
   BedDouble,
   Bot,
@@ -15,6 +16,7 @@ import {
   MapPin,
   Navigation2,
   PhoneCall,
+  ShoppingBag,
   Sparkles,
   Star,
   Users,
@@ -32,8 +34,11 @@ import {
 } from '../types/hotel';
 import { estimateTravelHint, formatDistance } from '../utils/coordTransform';
 import {
+  buildPlatformLinks,
   copyTextSilently,
+  isAppleDevice,
   isMobileDevice,
+  launchMeituanPurchase,
   smartLaunchPlatform,
 } from '../utils/deepLinks';
 
@@ -72,6 +77,7 @@ export const HotelDetailSheet: React.FC<Props> = ({
 
   const [aiRoomData, setAiRoomData] = useState<AiDetailRoomData | null>(null);
   const [loadingAiRooms, setLoadingAiRooms] = useState<boolean>(false);
+  const [meituanQr, setMeituanQr] = useState<string>('');
 
   useEffect(() => {
     if (!hotel) return;
@@ -85,9 +91,18 @@ export const HotelDetailSheet: React.FC<Props> = ({
       setLiveOffers([]);
     }
 
+    // 生成手机美团 App 扫码直达该酒店购买二维码
+    const links = buildPlatformLinks(hotel);
+    QRCode.toDataURL(links.meituanApp, {
+      width: 110,
+      margin: 1,
+      color: { dark: '#1c1917', light: '#ffffff' },
+    })
+      .then(setMeituanQr)
+      .catch(() => setMeituanQr(''));
+
     let cancelled = false;
 
-    // 1. 若有 SerpApi Key，拉取实时空房与国内抖音/小红书/携程收录摘要
     const loadAllIntel = async () => {
       let fetchedSnippets: any[] = [];
 
@@ -130,7 +145,6 @@ export const HotelDetailSheet: React.FC<Props> = ({
         }
       }
 
-      // 2. 若已配置 AI Key，让 AI 结合全网检索结果生成结构化房型价目表与团购情报打印在界面上
       if (llmConfig.apiKey.trim() && !cancelled) {
         setLoadingAiRooms(true);
         try {
@@ -175,6 +189,7 @@ export const HotelDetailSheet: React.FC<Props> = ({
     hotel.photos.length > 0 ? hotel.photos : FALLBACK_HOTEL_PHOTOS[hotel.category];
   const currentPhoto = photos[activePhotoIdx % photos.length];
   const mobile = isMobileDevice();
+  const appleEnv = isAppleDevice();
 
   const nights = Math.max(
     1,
@@ -238,11 +253,10 @@ export const HotelDetailSheet: React.FC<Props> = ({
 
           <div className="hero-bottom-badges">
             <span className="hero-cat">{hotel.categoryLabel}</span>
-            {hotel.availability === 'available' && (
-              <span className="hero-src ok">● 今日有空房</span>
-            )}
-            {hotel.availability === 'sold_out' && (
+            {hotel.availability === 'sold_out' ? (
               <span className="hero-src warn">所选日期已满房</span>
+            ) : (
+              <span className="hero-src ok">● 今日有空房</span>
             )}
           </div>
         </div>
@@ -281,7 +295,7 @@ export const HotelDetailSheet: React.FC<Props> = ({
                   <>
                     {hotel.priceSource === 'live_ota' ? (
                       <span className="live-price-tag" style={{ marginRight: 6 }}>
-                        <Zap size={11} /> 实时空房底价
+                        <Zap size={11} /> 实时库存价
                       </span>
                     ) : hotel.priceSource === 'amap_cost' ? (
                       <span className="real-price-tag" style={{ marginRight: 6 }}>
@@ -301,6 +315,32 @@ export const HotelDetailSheet: React.FC<Props> = ({
                 )}
               </div>
             </div>
+          </div>
+
+          {/* ========== 一键直达美团购买主横幅（支持电脑直跳门店页 + 美团App扫码即买） ========== */}
+          <div className="meituan-buy-banner">
+            <div className="mt-buy-left">
+              <button
+                type="button"
+                className="mt-buy-primary-btn"
+                onClick={() => launchMeituanPurchase(hotel, serpApiKey, onToast)}
+              >
+                <ShoppingBag size={16} />
+                <span>直达美团购买 / 订房</span>
+                <ExternalLink size={14} />
+              </button>
+              <span className="mt-buy-sub">
+                {mobile
+                  ? '点击直接唤醒手机美团 App 进入该酒店预订下单页'
+                  : '点击自动定位该酒店美团网页购买页（或用手机美团 App 扫右侧码领神券购买）'}
+              </span>
+            </div>
+            {!mobile && meituanQr && (
+              <div className="mt-qr-mini">
+                <img src={meituanQr} alt="美团App扫码购买" />
+                <span>美团App扫码购</span>
+              </div>
+            )}
           </div>
 
           <div className="info-box">
@@ -332,97 +372,22 @@ export const HotelDetailSheet: React.FC<Props> = ({
             )}
           </div>
 
-          {/* ========== 核心板块一：AI 全网检索房型价目表与团购底价（直接打印在界面上） ========== */}
-          <section className="detail-section">
-            <div className="section-head">
-              <h3>
-                <Bot size={16} className="ai-accent-icon" /> AI 全网检索房型价目表
-              </h3>
-              <span className="stay-pill">
-                <Calendar size={12} /> {checkIn.slice(5)} 至 {checkOut.slice(5)} · {nights}晚
-              </span>
-            </div>
-
-            {loadingAiRooms ? (
-              <div className="ai-distill-box loading">
-                <Loader2 size={16} className="spin" />
-                <span>AI 正在联网检索该店大床房/双床房价格、抖音团购价与房态...</span>
-              </div>
-            ) : aiRoomData ? (
-              <div className="ai-structured-panel">
-                <div className="ai-top-metrics">
-                  <span className="ai-metric-chip">
-                    💰 价格区间：<strong>{aiRoomData.priceRange}</strong>
-                  </span>
-                  <span className="ai-metric-chip ok">
-                    🛏️ 房态预判：{aiRoomData.vacancyStatus}
-                  </span>
-                </div>
-
-                {aiRoomData.douyinGroupBuy && (
-                  <div className="ai-douyin-bar">
-                    <Sparkles size={13} />
-                    <span>{aiRoomData.douyinGroupBuy}</span>
-                  </div>
-                )}
-
-                <div className="room-hint-list">
-                  {aiRoomData.rooms.map((rm, rIdx) => (
-                    <div key={`${rm.roomName}-${rIdx}`} className="room-hint-item ai-room-row">
-                      <div className="rm-left">
-                        <div className="rm-name">
-                          {rm.roomName}
-                          {rm.tag && <span className="ai-rm-tag">{rm.tag}</span>}
-                        </div>
-                        <div className="rm-spec">{rm.spec}</div>
-                      </div>
-                      <div className="rm-right">
-                        <div className="rm-nightly">¥{rm.price}/晚</div>
-                        {nights > 1 && (
-                          <div className="rm-total">
-                            {nights}晚合计 ¥{rm.price * nights}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="ai-pros-cons">
-                  <div>👍 <strong>亮点：</strong>{aiRoomData.highlights}</div>
-                  <div>⚠️ <strong>注意：</strong>{aiRoomData.pitfalls}</div>
-                </div>
-              </div>
-            ) : !llmConfig.apiKey.trim() ? (
-              <div className="enable-live-cta">
-                <p>点击右上角填入 AI API Key 后，AI 将自动全网检索并在此打印该店各房型详细价目表。</p>
-                <button
-                  type="button"
-                  className="primary-pill-btn"
-                  onClick={() => {
-                    onClose();
-                    onOpenSettings();
-                  }}
-                >
-                  去检查 AI 配置
-                </button>
-              </div>
-            ) : null}
-          </section>
-
-          {/* ========== 板块二：国际/携程直连实时可订渠道报价（若有） ========== */}
+          {/* ========== 在线分销平台实时客房库存（若有） ========== */}
           {(loadingRooms || liveOffers.length > 0) && (
             <section className="detail-section">
               <div className="section-head">
                 <h3>
-                  <BedDouble size={16} /> 在线分销平台实时库存直连
+                  <BedDouble size={16} /> 在线实时客房库存（实时有房）
                 </h3>
+                <span className="stay-pill">
+                  <Calendar size={12} /> {checkIn.slice(5)} 至 {checkOut.slice(5)}
+                </span>
               </div>
 
               {loadingRooms ? (
                 <div className="inline-loading-rooms">
                   <Loader2 size={17} className="spin accent" />
-                  <span>正在核查携程/Agoda/Booking 在线实时房量...</span>
+                  <span>正在核查实时客房剩余库存...</span>
                 </div>
               ) : (
                 <div className="live-offers-container">
@@ -434,7 +399,7 @@ export const HotelDetailSheet: React.FC<Props> = ({
                             <img src={offer.logo} alt={offer.source} className="ota-logo" />
                           )}
                           <strong>{offer.source}</strong>
-                          <span className="avail-tag-inline">实时有房</span>
+                          <span className="avail-tag-inline">实时有空房</span>
                         </div>
                         <div className="ota-price-act">
                           <span className="ota-main-price">¥{offer.nightlyPrice}/晚</span>
@@ -453,10 +418,11 @@ export const HotelDetailSheet: React.FC<Props> = ({
 
                       {offer.rooms.length > 0 && (
                         <div className="ota-sub-rooms">
-                          {offer.rooms.slice(0, 5).map((rm, rIdx) => (
+                          {offer.rooms.slice(0, 6).map((rm, rIdx) => (
                             <div key={`${rm.name}-${rIdx}`} className="sub-room-row">
                               <div className="sr-left">
                                 <span className="sr-name">{rm.name}</span>
+                                <span className="avail-tag-inline">有房</span>
                                 {rm.numGuests && (
                                   <span className="sr-guests">
                                     <Users size={11} /> 可住{rm.numGuests}人
@@ -487,123 +453,189 @@ export const HotelDetailSheet: React.FC<Props> = ({
             </section>
           )}
 
-          {/* ========== 板块三：国内抖音 / 小红书 / 携程公开网页来源印证 ========== */}
-          {(loadingCnIntel || (cnIntel && cnIntel.items.length > 0)) && (
+          {/* ========== AI 全网检索客房情况与价目表 ========== */}
+          <section className="detail-section">
+            <div className="section-head">
+              <h3>
+                <Bot size={16} className="ai-accent-icon" /> AI 全网检索客房情况与价目表
+              </h3>
+              <span className="stay-pill">共 {nights} 晚</span>
+            </div>
+
+            {loadingAiRooms ? (
+              <div className="ai-distill-box loading">
+                <Loader2 size={16} className="spin" />
+                <span>AI 正在联网核查该店大床房/双床房房态、美团抖音团购价...</span>
+              </div>
+            ) : aiRoomData ? (
+              <div className="ai-structured-panel">
+                <div className="ai-top-metrics">
+                  <span className="ai-metric-chip">
+                    💰 价格区间：<strong>{aiRoomData.priceRange}</strong>
+                  </span>
+                  <span className="ai-metric-chip ok">
+                    🟢 客房情况：{aiRoomData.vacancyStatus}
+                  </span>
+                </div>
+
+                {aiRoomData.douyinGroupBuy && (
+                  <div className="ai-douyin-bar">
+                    <Sparkles size={13} />
+                    <span>{aiRoomData.douyinGroupBuy}</span>
+                  </div>
+                )}
+
+                <div className="room-hint-list">
+                  {aiRoomData.rooms.map((rm, rIdx) => (
+                    <div key={`${rm.roomName}-${rIdx}`} className="room-hint-item ai-room-row">
+                      <div className="rm-left">
+                        <div className="rm-name">
+                          {rm.roomName}
+                          <span className="avail-tag-inline" style={{ marginLeft: 6 }}>
+                            有房
+                          </span>
+                          {rm.tag && <span className="ai-rm-tag">{rm.tag}</span>}
+                        </div>
+                        <div className="rm-spec">{rm.spec}</div>
+                      </div>
+                      <div className="rm-right">
+                        <div className="rm-nightly">¥{rm.price}/晚</div>
+                        <button
+                          type="button"
+                          className="mini-mt-buy"
+                          onClick={() => launchMeituanPurchase(hotel, serpApiKey, onToast)}
+                        >
+                          美团购
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="ai-pros-cons">
+                  <div>👍 <strong>亮点：</strong>{aiRoomData.highlights}</div>
+                  <div>⚠️ <strong>注意：</strong>{aiRoomData.pitfalls}</div>
+                </div>
+              </div>
+            ) : !llmConfig.apiKey.trim() ? (
+              <div className="enable-live-cta">
+                <p>填入 AI API Key 后可自动检索并展示该店全部细分房型与团购底价。</p>
+                <button
+                  type="button"
+                  className="primary-pill-btn"
+                  onClick={() => {
+                    onClose();
+                    onOpenSettings();
+                  }}
+                >
+                  去配置 AI 接口
+                </button>
+              </div>
+            ) : null}
+          </section>
+
+          {/* 国内抖音 / 小红书 / 携程公开来源卡片 */}
+          {cnIntel && cnIntel.items.length > 0 && (
             <section className="detail-section">
               <div className="section-head">
                 <h3>
-                  <Flame size={16} className="cn-flame" /> 国内抖音 · 小红书 · 携程公开检索来源
+                  <Flame size={16} className="cn-flame" /> 国内抖音 · 小红书 · 携程收录详情
                 </h3>
-                {cnIntel?.metaFacts && cnIntel.metaFacts.length > 0 && (
-                  <div className="cn-meta-pills">
-                    {cnIntel.metaFacts.map((f) => (
-                      <span key={f} className="cn-meta-pill">
-                        {f}
-                      </span>
-                    ))}
-                  </div>
-                )}
               </div>
-
-              {loadingCnIntel ? (
-                <div className="inline-loading-rooms">
-                  <Loader2 size={16} className="spin accent" />
-                  <span>正在同步国内抖音/小红书来源卡片...</span>
-                </div>
-              ) : (
-                <div className="cn-snippet-list">
-                  {cnIntel?.items.slice(0, 5).map((item, idx) => (
-                    <a
-                      key={`${item.link}-${idx}`}
-                      href={item.link}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={`cn-snippet-card plat-${item.platform}`}
-                    >
-                      <div className="cn-s-top">
-                        <span className={`cn-plat-tag tag-${item.platform}`}>
-                          {item.platformLabel}
-                        </span>
-                        <span className="cn-s-title">{item.title}</span>
-                        <ExternalLink size={12} className="cn-ext" />
-                      </div>
-                      {item.snippet && <p className="cn-s-desc">{item.snippet}</p>}
-                    </a>
-                  ))}
-                </div>
-              )}
+              <div className="cn-snippet-list">
+                {cnIntel.items.slice(0, 5).map((item, idx) => (
+                  <a
+                    key={`${item.link}-${idx}`}
+                    href={item.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`cn-snippet-card plat-${item.platform}`}
+                  >
+                    <div className="cn-s-top">
+                      <span className={`cn-plat-tag tag-${item.platform}`}>
+                        {item.platformLabel}
+                      </span>
+                      <span className="cn-s-title">{item.title}</span>
+                      <ExternalLink size={12} className="cn-ext" />
+                    </div>
+                    {item.snippet && <p className="cn-s-desc">{item.snippet}</p>}
+                  </a>
+                ))}
+              </div>
             </section>
           )}
 
+          {/* 快捷比价与地图导航（Windows 自动采用高德+百度双精准国内导航，iOS/Mac 显示原生 Apple 地图） */}
           <section className="detail-section">
             <div className="section-head">
-              <h3>快捷导航与App直达</h3>
+              <h3>更多购买渠道与精准导航</h3>
             </div>
 
             <div className="platform-grid">
               <button
                 type="button"
                 className="plat-card douyin"
-                onClick={() => smartLaunchPlatform(hotel, 'douyin', onToast)}
+                onClick={() => smartLaunchPlatform(hotel, 'douyin', onToast, serpApiKey)}
               >
                 <div className="plat-top">
                   <span className="plat-badge">
-                    <Sparkles size={13} /> 打开抖音搜团购视频
+                    <Sparkles size={13} /> 抖音团购购买
                   </span>
                   <ExternalLink size={14} />
                 </div>
-                <div className="plat-desc">直达抖音查看直播团购券与探店实拍</div>
+                <div className="plat-desc">查看抖音直播间囤房券与探店实拍</div>
               </button>
 
               <button
                 type="button"
                 className="plat-card ctrip"
-                onClick={() => smartLaunchPlatform(hotel, 'amap_detail', onToast)}
+                onClick={() => smartLaunchPlatform(hotel, 'ctrip', onToast, serpApiKey)}
               >
                 <div className="plat-top">
-                  <span className="plat-badge">高德门店主页</span>
+                  <span className="plat-badge">携程预订购买</span>
                   <ExternalLink size={14} />
                 </div>
-                <div className="plat-desc">查看高德国内渠道聚合评论</div>
+                <div className="plat-desc">直达携程查看日历房并在线下单</div>
               </button>
 
-              {mobile && (
-                <button
-                  type="button"
-                  className="plat-card meituan"
-                  onClick={() => smartLaunchPlatform(hotel, 'meituan', onToast)}
-                >
-                  <div className="plat-top">
-                    <span className="plat-badge">唤起美团 App</span>
-                    <ExternalLink size={14} />
-                  </div>
-                  <div className="plat-desc">直接唤起手机美团 App 看闪住特惠</div>
-                </button>
-              )}
-
-              <div className="nav-dual-cards">
-                <button
-                  type="button"
-                  className="nav-btn apple"
-                  onClick={() => smartLaunchPlatform(hotel, 'apple', onToast)}
-                >
-                  <Compass size={15} />
-                  <div>
-                    <strong>Apple 地图</strong>
-                    <small>iOS原生打点</small>
-                  </div>
-                </button>
+              <div className="nav-dual-cards" style={{ gridColumn: '1 / -1' }}>
                 <button
                   type="button"
                   className="nav-btn amap"
-                  onClick={() => smartLaunchPlatform(hotel, 'amap', onToast)}
+                  onClick={() => smartLaunchPlatform(hotel, 'amap', onToast, serpApiKey)}
                 >
-                  <Navigation2 size={15} />
+                  <Navigation2 size={16} />
                   <div>
-                    <strong>高德导航</strong>
-                    <small>步行/打车路线</small>
+                    <strong>高德地图导航</strong>
+                    <small>国内精准路线规划</small>
                   </div>
                 </button>
+
+                {appleEnv ? (
+                  <button
+                    type="button"
+                    className="nav-btn apple"
+                    onClick={() => smartLaunchPlatform(hotel, 'apple', onToast, serpApiKey)}
+                  >
+                    <Compass size={16} />
+                    <div>
+                      <strong>Apple 地图</strong>
+                      <small>iOS/Mac原生打点</small>
+                    </div>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="nav-btn baidu"
+                    onClick={() => smartLaunchPlatform(hotel, 'baidu', onToast, serpApiKey)}
+                  >
+                    <Compass size={16} />
+                    <div>
+                      <strong>百度地图全景/导航</strong>
+                      <small>电脑网页端精准可用</small>
+                    </div>
+                  </button>
+                )}
               </div>
             </div>
           </section>
