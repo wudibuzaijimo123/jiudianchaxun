@@ -86,8 +86,7 @@ export const MeituanBuyModal: React.FC<Props> = ({ hotel, onClose }) => {
                 href={ctripBuyUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="book-direct-btn"
-                style={{ justifyContent: 'center', padding: '10px 12px', fontSize: 13 }}
+                className="buy-modal-btn ctrip-btn"
               >
                 去携程电脑版购买 <ExternalLink size={13} />
               </a>
@@ -95,13 +94,7 @@ export const MeituanBuyModal: React.FC<Props> = ({ hotel, onClose }) => {
                 href={tongchengBuyUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="book-direct-btn"
-                style={{
-                  justifyContent: 'center',
-                  padding: '10px 12px',
-                  fontSize: 13,
-                  background: '#059669',
-                }}
+                className="buy-modal-btn tongcheng-btn"
               >
                 去同程电脑版购买 <ExternalLink size={13} />
               </a>

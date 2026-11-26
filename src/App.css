@@ -3285,3 +3285,34 @@ input {
   padding: 4px 0;
   cursor: pointer;
 }
+
+
+/* ========== 购买弹窗按钮高对比白色文字修复 ========== */
+.guide-card a.buy-modal-btn,
+.buy-modal-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 11px 14px;
+  border-radius: 10px;
+  font-size: 13.5px;
+  font-weight: 800;
+  color: #ffffff !important;
+  text-decoration: none;
+  transition: filter 0.15s, transform 0.12s;
+}
+
+.buy-modal-btn.ctrip-btn {
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
+  box-shadow: 0 3px 10px rgba(37, 99, 235, 0.25);
+}
+
+.buy-modal-btn.tongcheng-btn {
+  background: linear-gradient(135deg, #10b981, #059669);
+  box-shadow: 0 3px 10px rgba(5, 150, 105, 0.25);
+}
+
+.buy-modal-btn:hover {
+  filter: brightness(1.06);
+}
