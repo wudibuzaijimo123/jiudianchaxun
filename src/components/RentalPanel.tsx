@@ -27,7 +27,7 @@ import { LlmConfig, PlaceSuggestion, SearchCenter } from '../types/hotel';
 import { RentalFilterState, RentalListing, RentalSortMode } from '../types/rental';
 import { amapTargetFrom, openInAmap } from '../utils/mapLaunch';
 import { copyTextSilently } from '../utils/deepLinks';
-import { openExternalUrl } from '../utils/nativeBridge';
+import { openExternalUrl, reserveTab } from '../utils/nativeBridge';
 import { RentalCard } from './RentalCard';
 import { RentalDetailSheet } from './RentalDetailSheet';
 import { RentalMapView } from './RentalMapView';
@@ -208,6 +208,8 @@ export const RentalPanel: React.FC<Props> = ({
 
       // 和酒店查询一致：先复制精准搜索词，再打开平台，用户进去直接粘贴
       const keyword = buildRentalSearchKeyword(center, listing);
+      // 先在点击事件里占位，避免复制完成后再 window.open 被浏览器当弹窗拦掉
+      const tab = reserveTab();
       const copied = await copyTextSilently(keyword);
       if (platform === 'anjuke' || platform === 'wuba') {
         onToast(
@@ -220,7 +222,7 @@ export const RentalPanel: React.FC<Props> = ({
       }
 
       const links = buildRentalPlatformLinks(center, listing);
-      void openExternalUrl(links[platform]);
+      void openExternalUrl(links[platform], tab);
     },
     [center, onToast]
   );

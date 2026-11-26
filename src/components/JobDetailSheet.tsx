@@ -4,6 +4,8 @@ import QRCode from 'qrcode';
 import {
   Banknote,
   Briefcase,
+  Copy,
+  ExternalLink,
   GraduationCap,
   Info,
   MapPin,
@@ -13,9 +15,11 @@ import {
   X,
 } from 'lucide-react';
 import { JobListing } from '../types/job';
+import { copyTextSilently } from '../utils/deepLinks';
 import { formatDistance } from '../utils/coordTransform';
 import { buildAmapWebUrl } from '../utils/mapLaunch';
 import { buildAmapStaticMapUrl, isAmapPhoto, isStaticMapUrl, photoSrc } from '../utils/rentalImages';
+import { buildBossSearchUrl } from '../services/jobService';
 
 interface Props {
   job: JobListing | null;
@@ -29,23 +33,25 @@ export const JobDetailSheet: React.FC<Props> = ({ job, city, amapKey, onClose, o
   const [activePhoto, setActivePhoto] = useState(0);
   const [qrMode, setQrMode] = useState<'boss' | 'amap'>('boss');
   const [qrUrl, setQrUrl] = useState('');
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     setActivePhoto(0);
   }, [job?.id]);
 
-  // 手机扫码直达：BOSS直聘同岗位搜索 / 高德定位单位
+  const cleanCity = String(city || '').replace(/市$/, '');
+  // 岗位标题本身就是最好的检索词，城市交给 city 参数限定，避免搜出外地岗位
+  const searchKeyword = job ? job.title : '';
+
+  // 手机扫码直达：BOSS直聘该城市同岗位搜索 / 高德定位单位
   useEffect(() => {
     if (!job) {
       setQrUrl('');
       return;
     }
-    const cleanCity = String(city || '').replace(/市$/, '');
     const target =
       qrMode === 'boss'
-        ? `https://www.zhipin.com/web/geek/job?query=${encodeURIComponent(
-            `${cleanCity} ${job.title}`.trim()
-          )}`
+        ? buildBossSearchUrl(city, job.title)
         : buildAmapWebUrl({
             name: job.company,
             address: job.address,
@@ -71,6 +77,29 @@ export const JobDetailSheet: React.FC<Props> = ({ job, city, amapKey, onClose, o
       cancelled = true;
     };
   }, [job?.id, qrMode, city, job?.lng, job?.lat, job?.company, job?.title]);
+
+  const bossDirectUrl = job ? buildBossSearchUrl(city, job.title) : '';
+  const amapDirectUrl = job
+    ? buildAmapWebUrl({
+        name: job.company,
+        address: job.address,
+        city,
+        lng: job.lng,
+        lat: job.lat,
+        approx: job.geoApprox,
+      })
+    : '';
+  const scanOpenUrl = qrMode === 'boss' ? bossDirectUrl : amapDirectUrl;
+
+  const handleCopyKeyword = async () => {
+    const text = qrMode === 'boss' ? searchKeyword : `${cleanCity} ${job?.company || ''}`.trim();
+    const ok = await copyTextSilently(text);
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2400);
+    }
+    return ok;
+  };
 
   if (!job) return null;
   const isDemo = job.source === 'demo';
@@ -255,11 +284,23 @@ export const JobDetailSheet: React.FC<Props> = ({ job, city, amapKey, onClose, o
               ) : (
                 <div className="jb-scan-placeholder">二维码生成中…</div>
               )}
-              <p>
-                {qrMode === 'boss'
-                  ? `手机扫一下，直接在 BOSS 直聘搜「${job.title}」，可看本地同岗位的真实在招信息`
-                  : `扫一下在手机高德地图上定位「${job.company}」，先看看单位在哪儿再决定去不去面试`}
-              </p>
+              <div className="jb-scan-side">
+                <p>
+                  {qrMode === 'boss'
+                    ? `手机扫一下，直接进 BOSS直聘 搜「${job.title}」（限定${cleanCity || '当前城市'}），看真实在招岗位`
+                    : `扫一下在手机高德地图上定位「${job.company}」，先看看单位在哪儿再决定去不去面试`}
+                </p>
+                <div className="jb-scan-actions">
+                  <button type="button" onClick={() => void handleCopyKeyword()}>
+                    <Copy size={12} /> {copied ? '已复制' : qrMode === 'boss' ? '复制搜索词' : '复制单位名'}
+                  </button>
+                  {scanOpenUrl && (
+                    <a href={scanOpenUrl} target="_blank" rel="noopener noreferrer">
+                      <ExternalLink size={12} /> 本机打开
+                    </a>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>

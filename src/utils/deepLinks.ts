@@ -1,5 +1,5 @@
 import { HotelItem } from '../types/hotel';
-import { openAppOrWeb, openExternalUrl } from './nativeBridge';
+import { openAppOrWeb, openExternalUrl, reserveTab } from './nativeBridge';
 
 export function isMobileDevice(): boolean {
   if (typeof navigator === 'undefined') return false;
@@ -105,20 +105,22 @@ export async function launchMeituanPurchase(
 ): Promise<void> {
   const links = buildPlatformLinks(hotel);
   const exactQuery = buildExactStoreQuery(hotel);
+  // 点击事件里先占位，避免复制完成后再 window.open 被浏览器拦成弹窗
+  const tab = reserveTab();
   await copyTextSilently(exactQuery);
 
   if (isMobileDevice()) {
     onToast?.(`正在唤起美团 App 锁定「${exactQuery}」`);
-    const opened = await openExternalUrl(links.meituanApp);
+    const opened = await openExternalUrl(links.meituanApp, tab);
     if (!opened) {
       onToast?.('未检测到美团 App，店名已复制，可到浏览器粘贴搜索');
-      await openExternalUrl(links.ctripWeb);
+      await openExternalUrl(links.ctripWeb, tab);
     }
     return;
   }
 
   onToast?.(`已复制精准店名「${exactQuery}」`);
-  await openExternalUrl(links.ctripWeb);
+  await openExternalUrl(links.ctripWeb, tab);
 }
 
 export async function smartLaunchPlatform(
@@ -134,11 +136,12 @@ export async function smartLaunchPlatform(
   const links = buildPlatformLinks(hotel);
   const exactQuery = buildExactStoreQuery(hotel);
   const mobile = isMobileDevice();
+  const tab = reserveTab();
   await copyTextSilently(exactQuery);
 
   if (platform === 'amap_detail') {
     onToast?.(`正在打开「${hotel.name}」高德唯一门店ID比价页`);
-    await openExternalUrl(mobile ? links.amapPoiApp : links.amapDetail);
+    await openExternalUrl(mobile ? links.amapPoiApp : links.amapDetail, tab);
     return;
   }
 
@@ -148,36 +151,36 @@ export async function smartLaunchPlatform(
       await openAppOrWeb(links.douyinApp, links.douyinWeb);
     } else {
       onToast?.(`正在打开抖音网页版查看「${exactQuery}」`);
-      await openExternalUrl(links.douyinWeb);
+      await openExternalUrl(links.douyinWeb, tab);
     }
     return;
   }
 
   if (platform === 'ctrip') {
     onToast?.(`正在打开携程精准查找「${exactQuery}」`);
-    await openExternalUrl(links.ctripWeb);
+    await openExternalUrl(links.ctripWeb, tab);
     return;
   }
 
   if (platform === 'baidu') {
     onToast?.(`正在打开百度地图定位「${hotel.name}」`);
-    await openExternalUrl(links.baiduNav);
+    await openExternalUrl(links.baiduNav, tab);
     return;
   }
 
   if (platform === 'apple') {
     if (!isAppleDevice()) {
       onToast?.('苹果网页版不支持中国大陆定位，已自动切换高德精准定位');
-      await openExternalUrl(links.amapNav);
+      await openExternalUrl(links.amapNav, tab);
       return;
     }
     onToast?.(`正在唤起 Apple 地图定位「${hotel.name}」`);
-    await openExternalUrl(links.appleMaps);
+    await openExternalUrl(links.appleMaps, tab);
     return;
   }
 
   if (platform === 'amap') {
     onToast?.(`正在打开高德地图路线规划`);
-    await openExternalUrl(links.amapNav);
+    await openExternalUrl(links.amapNav, tab);
   }
 }

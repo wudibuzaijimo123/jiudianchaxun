@@ -1109,6 +1109,47 @@
   color: var(--text-sub);
 }
 
+.jb-scan-side {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.jb-scan-side p {
+  margin: 0;
+}
+
+.jb-scan-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.jb-scan-actions button,
+.jb-scan-actions a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 9px;
+  border-radius: 8px;
+  border: 1px solid #bfdbfe;
+  background: #ffffff;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.jb-scan-actions button:active,
+.jb-scan-actions a:active {
+  background: #eff6ff;
+}
+
 @media (max-width: 380px) {
   .jb-salary {
     font-size: 12px;

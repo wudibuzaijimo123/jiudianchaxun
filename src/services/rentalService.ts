@@ -264,23 +264,35 @@ export async function enrichRentalMedia(
   return out;
 }
 
+/** 半径越大给的条数越多，避免「换成 5km 还是同一批房子」 */
+export function rentalCountForRadius(radius: number): number {
+  if (radius <= 1000) return 8;
+  if (radius <= 2000) return 10;
+  if (radius <= 3000) return 12;
+  if (radius <= 5000) return 16;
+  return 20;
+}
+
 export function buildRentalPrompt(
   center: SearchCenter,
   radius: number,
-  count = 12,
+  count = rentalCountForRadius(3000),
   maxRent: number | null = null
 ): string {
   const cleanCity = String(center.city || '').replace(/市$/, '');
-  return `你是中国本地租房信息检索引擎。请检索「${cleanCity} ${center.name}」周边 ${
-    radius >= 1000 ? `${radius / 1000}km` : `${radius}m`
-  } 范围内的真实可租房源信息（参考安居客/58同城/贝壳上该地段的挂牌特征），输出约 ${count} 条最贴近现实中常见房源的记录。
+  const rangeText = radius >= 1000 ? `${Math.round(radius / 1000)}km` : `${radius}m`;
+  const near = Math.max(150, Math.round(radius * 0.08));
+  const mid = Math.max(near + 200, Math.round(radius * 0.4));
+  return `你是中国本地租房信息检索引擎。请检索「${cleanCity} ${center.name}」周边 ${rangeText} 内的真实可租房源，参照安居客/58同城/贝壳该地段的挂牌特征，输出约 ${count} 条。
 
-要求：
-1. 优先覆盖当地真实存在的小区、公寓、自建房、城中村、招待所等，不要编造高端楼盘；
-2. 房价必须符合该城市该地段的真实行情${maxRent ? `，月租尽量不超过 ${maxRent} 元` : ''}；
-3. 类型包含整租、合租、单间、床位、日租（小城市场景请给出单间/床位/日租等低价选项）；
-4. 不要编造房东手机号码，不要输出联系方式字段；
-5. 距离用估算值（米），必须是合理数字。
+硬性要求（很重要）：
+1. 小区 / 公寓 / 自建房 / 城中村名称必须互不相同；同一小区最多 2 条且户型不同；标题用「类型·小区名 户型」的形式，不要每条都以「${center.name}」开头，也不要几条房源只换个数字；
+2. 距离必须铺满整个 ${rangeText} 范围：约 1/3 在 ${near}-${mid}m，约 1/3 在 ${mid}m-${Math.round(
+    radius * 0.8
+  )}m，其余接近 ${rangeText} 上限；不要所有房源都挤在同一个距离数字附近；
+3. 租金分低、中、高三档，符合该城市该地段的真实行情${maxRent ? `，月租尽量不超过 ${maxRent} 元` : ''}；
+4. 类型混合整租、合租、单间、床位、日租；县城 / 城乡结合部多给单间、床位等低价选项，市区多给整租与合租；
+5. 每条给真实感的地址（街道 + 门牌号），不要编造房东手机号，不要输出联系方式字段。
 
 严格只返回 JSON 数组，不要任何解释文字，每项字段如下：
 [
@@ -328,10 +340,10 @@ export async function callDirectClientRentals(
       model: llm.model || 'deepseek-chat',
       messages: [
         { role: 'system', content: '只输出合法的纯 JSON 数组，禁止任何多余解释。' },
-        { role: 'user', content: buildRentalPrompt(center, radius) },
+        { role: 'user', content: buildRentalPrompt(center, radius, rentalCountForRadius(radius)) },
       ],
-      temperature: 0.3,
-      max_tokens: 3200,
+      temperature: 0.85,
+      max_tokens: 3600,
     }),
   });
   const data = await resp.json();
@@ -526,9 +538,17 @@ export async function searchRentals(options: RentalQueryOptions): Promise<Rental
   }
 
   const finish = async (rawList: any[], notice = ''): Promise<RentalSearchResult> => {
+    const seen = new Set<string>();
     const normalized = rawList
       .map((raw, idx) => normalizeListing(raw, idx))
       .filter((l): l is RentalListing => Boolean(l))
+      // 同名小区 + 同户型只保留一条，避免一张列表全是「XX小区」
+      .filter((l) => {
+        const key = `${l.community}|${l.kind}|${l.layout}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
       .sort((a, b) => a.distanceMeters - b.distanceMeters);
     if (normalized.length === 0) {
       return demoResult(center, 'AI 本次没有返回可用房源，先展示示例数据，可稍后点「重新检索」。', amapKey);
@@ -552,7 +572,7 @@ export async function searchRentals(options: RentalQueryOptions): Promise<Rental
           centerName: center.name,
           radius,
           maxRent,
-          count: 12,
+          count: rentalCountForRadius(radius),
         }),
       });
       const data = await resp.json();

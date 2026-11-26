@@ -4,6 +4,8 @@ import QRCode from 'qrcode';
 import {
   Building2,
   Compass,
+  Copy,
+  ExternalLink,
   Info,
   Layers,
   MapPin,
@@ -16,6 +18,7 @@ import {
 } from 'lucide-react';
 import { RentalListing } from '../types/rental';
 import { formatDistance } from '../utils/coordTransform';
+import { copyTextSilently } from '../utils/deepLinks';
 import { buildAnjukeMobileUrl } from '../services/rentalService';
 import { buildAmapWebUrl } from '../utils/mapLaunch';
 import { RENTAL_FALLBACK_PHOTOS, buildAmapStaticMapUrl, isAmapPhoto, isStaticMapUrl, photoSrc, rentalPhotos } from '../utils/rentalImages';
@@ -37,12 +40,15 @@ export const RentalDetailSheet: React.FC<Props> = ({ listing, city, amapKey, onC
   const [activePhoto, setActivePhoto] = useState(0);
   const [qrMode, setQrMode] = useState<'anjuke' | 'amap'>('anjuke');
   const [qrUrl, setQrUrl] = useState('');
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     setActivePhoto(0);
   }, [listing?.id]);
 
-  // 手机扫码直达：安居客该小区搜索页 / 高德地图定位
+  const cleanCity = String(city || '').replace(/市$/, '');
+
+  // 手机扫码直达：安居客该小区租房搜索页 / 高德地图定位
   useEffect(() => {
     if (!listing) {
       setQrUrl('');
@@ -76,6 +82,33 @@ export const RentalDetailSheet: React.FC<Props> = ({ listing, city, amapKey, onC
       cancelled = true;
     };
   }, [listing?.id, qrMode, city, listing?.lng, listing?.lat, listing?.community]);
+
+  const amapDirectUrl = listing
+    ? buildAmapWebUrl({
+        name: listing.community,
+        address: listing.address,
+        city,
+        lng: listing.lng,
+        lat: listing.lat,
+        approx: listing.geoApprox,
+      })
+    : '';
+  const scanOpenUrl =
+    qrMode === 'anjuke'
+      ? listing
+        ? buildAnjukeMobileUrl(city, listing)
+        : ''
+      : amapDirectUrl;
+
+  const handleCopyKeyword = async () => {
+    const text = listing ? `${cleanCity} ${listing.community} 租房`.trim() : '';
+    const ok = await copyTextSilently(text);
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2400);
+    }
+    return ok;
+  };
 
   if (!listing) return null;
   const isDemo = listing.priceSource === 'demo';
@@ -279,11 +312,24 @@ export const RentalDetailSheet: React.FC<Props> = ({ listing, city, amapKey, onC
               ) : (
                 <div className="rt-scan-placeholder">二维码生成中…</div>
               )}
-              <p>
-                {qrMode === 'anjuke'
-                  ? `用手机相机或微信扫一下，直接在安居客打开「${listing.community}」的租房搜索页`
-                  : `扫一下在手机高德地图上定位「${listing.community}」，可直接导航过去看房`}
-              </p>
+              <div className="rt-scan-side">
+                <p>
+                  {qrMode === 'anjuke'
+                    ? `手机扫一下，直接进安居客看「${listing.community}」的租房信息（${cleanCity || '当前城市'}）`
+                    : `扫一下在手机高德地图上定位「${listing.community}」，可直接导航过去看房`}
+                </p>
+                <div className="rt-scan-actions">
+                  <button type="button" onClick={() => void handleCopyKeyword()}>
+                    <Copy size={12} />{' '}
+                    {copied ? '已复制' : qrMode === 'anjuke' ? '复制小区名' : '复制小区名'}
+                  </button>
+                  {scanOpenUrl && (
+                    <a href={scanOpenUrl} target="_blank" rel="noopener noreferrer">
+                      <ExternalLink size={12} /> 本机打开
+                    </a>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>

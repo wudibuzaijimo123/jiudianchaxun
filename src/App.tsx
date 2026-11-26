@@ -536,7 +536,7 @@ export const App: React.FC = () => {
     <div className="app-shell">
       <header className="top-navbar">
         <div className="brand-area">
-          <div className="brand-logo">住</div>
+          <div className="brand-logo">查</div>
           <div>
             <h1>附近查一查</h1>
             <p className="brand-sub">酒店 · 租房 · 招聘，周边一图查</p>

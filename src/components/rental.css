@@ -1440,6 +1440,47 @@
   color: var(--text-sub);
 }
 
+.rt-scan-side {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rt-scan-side p {
+  margin: 0;
+}
+
+.rt-scan-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.rt-scan-actions button,
+.rt-scan-actions a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 9px;
+  border-radius: 8px;
+  border: 1px solid #bfdbfe;
+  background: #ffffff;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.rt-scan-actions button:active,
+.rt-scan-actions a:active {
+  background: #eff6ff;
+}
+
 @media (max-width: 380px) {
   .rt-thumb {
     width: 92px;

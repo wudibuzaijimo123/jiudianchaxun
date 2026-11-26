@@ -9,6 +9,7 @@ import {
 import { extractJsonFromText, isNativePackagedApp, resolveApiUrl } from './standaloneClient';
 import { fetchAmapPoiMedia } from './rentalService';
 import { calcDistanceMeters } from '../utils/coordTransform';
+import { bossCityCode } from '../utils/citySlug';
 
 const CACHE_KEY = 'jdcx_job_cache_v1';
 const CACHE_TTL = 30 * 60 * 1000;
@@ -173,18 +174,33 @@ export async function enrichJobMedia(
   return out;
 }
 
-export function buildJobPrompt(center: SearchCenter, radius: number, count = 12): string {
+/** 半径越大给的条数越多，避免「换成 5km 还是同一批岗位」 */
+export function jobCountForRadius(radius: number): number {
+  if (radius <= 1000) return 8;
+  if (radius <= 2000) return 10;
+  if (radius <= 3000) return 12;
+  if (radius <= 5000) return 16;
+  return 20;
+}
+
+export function buildJobPrompt(
+  center: SearchCenter,
+  radius: number,
+  count = jobCountForRadius(3000)
+): string {
   const cleanCity = String(center.city || '').replace(/市$/, '');
-  return `你是中国本地招聘信息检索引擎。请检索「${cleanCity} ${center.name}」周边 ${
-    radius >= 1000 ? `${radius / 1000}km` : `${radius}m`
-  } 范围内真实在招岗位（参照 BOSS 直聘/58同城/智联招聘上该地段的门店与小微企业招聘特征），输出约 ${count} 条。
+  const rangeText = radius >= 1000 ? `${Math.round(radius / 1000)}km` : `${radius}m`;
+  const nearM = Math.max(150, Math.round(radius * 0.08));
+  const midM = Math.max(nearM + 200, Math.round(radius * 0.4));
+  return `你是中国本地招聘信息检索引擎。请检索「${cleanCity} ${center.name}」周边 ${rangeText} 内的真实在招岗位（参照 BOSS 直聘/58同城/智联招聘上该地段门店与小微信企业的招聘特征），输出约 ${count} 条。
 
 要求：
 1. 以餐饮、酒店、超市、快递物流、家政、门店导购、工厂普工、外卖骑手等小城市常见岗位为主，不要编造大厂高薪岗位；
 2. 薪资必须符合该城市该地段真实行情，写清单位（元/月、元/天、元/时）；
-3. 类型覆盖全职、兼职、日结、钟点工；
-4. 不要编造 HR 手机号、微信号，不要输出联系方式字段；
-5. 距离用估算值（米），必须是合理数字。
+3. 类型覆盖全职、兼职、日结、钟点工、实习；
+4. 单位名称必须互不相同，不要几条岗位只是换个名字但同一家店；
+5. 距离铺满整个 ${rangeText}：约 1/3 在 ${nearM}-${midM}m，约 1/3 在 ${midM}m-${Math.round(radius * 0.8)}m，其余接近 ${rangeText} 上限，不要都挤在 300-500m；
+6. 不要编造 HR 手机号、微信号，不要输出联系方式字段。
 
 严格只返回 JSON 数组，不要任何解释文字，每项字段如下：
 [
@@ -229,9 +245,9 @@ export async function callDirectClientJobs(
       model: llm.model || 'deepseek-chat',
       messages: [
         { role: 'system', content: '只输出合法的纯 JSON 数组，禁止任何多余解释。' },
-        { role: 'user', content: buildJobPrompt(center, radius) },
+        { role: 'user', content: buildJobPrompt(center, radius, jobCountForRadius(radius)) },
       ],
-      temperature: 0.3,
+      temperature: 0.85,
       max_tokens: 3200,
     }),
   });
@@ -482,7 +498,7 @@ export async function searchJobs(options: JobQueryOptions): Promise<JobSearchRes
           city: center.city,
           centerName: center.name,
           radius,
-          count: 12,
+          count: jobCountForRadius(radius),
         }),
       });
       const data = await resp.json();
@@ -504,6 +520,18 @@ export async function searchJobs(options: JobQueryOptions): Promise<JobSearchRes
   }
 }
 
+/**
+ * BOSS直聘网页搜索页。
+ * 带上城市编码，否则平台按 IP / 上次城市出结果，很容易跳到外地岗位。
+ */
+export function buildBossSearchUrl(city: string, keyword: string): string {
+  const code = bossCityCode(city);
+  return (
+    `https://www.zhipin.com/web/geek/job?query=${encodeURIComponent(keyword)}` +
+    (code ? `&city=${code}` : '')
+  );
+}
+
 /** 招聘平台跳转（平台不支持深链参数时退化为站内搜索，不编造岗位详情页） */
 export function buildJobPlatformLinks(center: SearchCenter, job?: JobListing | null) {
   const cleanCity = String(center.city || '').replace(/市$/, '');
@@ -511,7 +539,8 @@ export function buildJobPlatformLinks(center: SearchCenter, job?: JobListing | n
   const encoded = encodeURIComponent(kw);
 
   return {
-    boss: `https://www.zhipin.com/web/geek/job?query=${encoded}`,
+    // 岗位标题就是最准的检索词，城市用 city 参数限定，避免搜出外地岗位
+    boss: buildBossSearchUrl(center.city, job ? job.title : kw),
     wuba: `https://m.58.com/job/?key=${encoded}`,
     zhaopin: `https://sou.zhaopin.com/?kw=${encoded}`,
   };

@@ -24,7 +24,7 @@ import { LlmConfig, PlaceSuggestion, SearchCenter } from '../types/hotel';
 import { JobFilterState, JobListing, JobSortMode } from '../types/job';
 import { openInAmap } from '../utils/mapLaunch';
 import { copyTextSilently } from '../utils/deepLinks';
-import { openExternalUrl } from '../utils/nativeBridge';
+import { openExternalUrl, reserveTab } from '../utils/nativeBridge';
 import { JobCard } from './JobCard';
 import { JobDetailSheet } from './JobDetailSheet';
 import './job.css';
@@ -192,13 +192,15 @@ export const JobPanel: React.FC<Props> = ({
 
       // 与酒店/租房一致：先复制精准搜索词，再打开平台粘贴
       const keyword = `${String(center.city || '').replace(/市$/, '')} ${job.title} 招聘`.trim();
+      // 先占位，避免复制完成后 window.open 被当弹窗拦截
+      const tab = reserveTab();
       const copied = await copyTextSilently(keyword);
       onToast(
         copied ? `已复制「${keyword}」，进入平台粘贴搜索` : `正在打开平台，进入后搜索「${keyword}」`
       );
 
       const links = buildJobPlatformLinks(center, job);
-      void openExternalUrl(links[platform]);
+      void openExternalUrl(links[platform], tab);
     },
     [center, onToast]
   );
