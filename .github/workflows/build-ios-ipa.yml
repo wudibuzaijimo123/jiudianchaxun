@@ -35,6 +35,51 @@ jobs:
           fi
           npx cap sync ios
 
+      # cap add ios 生成的是 Capacitor 默认白底蓝叉占位图标，这里换成 resources/icon.png
+      # 图标源文件必须是 1024x1024、不透明、直角；iOS 会自己裁圆角
+      - name: Inject app icon
+        run: |
+          set -e
+          SRC="resources/icon.png"
+          DEST_DIR="ios/App/App/Assets.xcassets/AppIcon.appiconset"
+          if [ ! -f "$SRC" ]; then
+            echo "缺少 $SRC，跳过图标替换（会保留 Capacitor 默认图标）"
+            exit 0
+          fi
+          mkdir -p "$DEST_DIR"
+          find "$DEST_DIR" -name "*.png" -delete
+          cp "$SRC" "$DEST_DIR/AppIcon-512@2x.png"
+          cat > "$DEST_DIR/Contents.json" <<'JSON'
+          {
+            "images" : [
+              {
+                "filename" : "AppIcon-512@2x.png",
+                "idiom" : "universal",
+                "platform" : "ios",
+                "size" : "1024x1024"
+              }
+            ],
+            "info" : {
+              "author" : "xcode",
+              "version" : 1
+            }
+          }
+          JSON
+          echo "---- 图标已就位 ----"
+          ls -l "$DEST_DIR"
+          # 用 macOS 自带 sips 校验尺寸与透明度（不依赖额外工具）
+          W=$(sips -g pixelWidth "$DEST_DIR/AppIcon-512@2x.png" | awk '/pixelWidth/{print $2}')
+          H=$(sips -g pixelHeight "$DEST_DIR/AppIcon-512@2x.png" | awk '/pixelHeight/{print $2}')
+          A=$(sips -g hasAlpha "$DEST_DIR/AppIcon-512@2x.png" | awk '/hasAlpha/{print $2}')
+          echo "icon=${W}x${H} hasAlpha=${A}"
+          if [ "$W" != "1024" ] || [ "$H" != "1024" ]; then
+            echo "图标必须是 1024x1024，当前 ${W}x${H}"
+            exit 1
+          fi
+          if [ "$A" = "yes" ]; then
+            echo "警告：图标带 Alpha 通道，建议导出为不带透明度的 PNG"
+          fi
+
       - name: Inject Info.plist keys
         run: |
           PLIST="ios/App/App/Info.plist"

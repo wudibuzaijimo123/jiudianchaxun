@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="1024" height="1024">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2563eb" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+  </defs>
+  <!-- iOS App 图标：满幅不透明底、直角无圆角，系统会自动裁圆角 -->
+  <rect width="512" height="512" fill="url(#bg)" />
+  <circle cx="256" cy="228" r="158" fill="none" stroke="#60a5fa" stroke-width="14" stroke-dasharray="22 18" opacity="0.42" />
+  <circle cx="256" cy="228" r="104" fill="none" stroke="#93c5fd" stroke-width="10" stroke-dasharray="16 20" opacity="0.3" />
+  <path d="M256 84c-71 0-128 55.6-128 124.4 0 90.2 128 214.6 128 214.6s128-124.4 128-214.6C384 139.6 327 84 256 84z" fill="#ffffff" />
+  <rect x="200" y="162" width="112" height="94" rx="14" fill="#2563eb" />
+  <rect x="218" y="180" width="24" height="22" rx="5" fill="#ffffff" />
+  <rect x="270" y="180" width="24" height="22" rx="5" fill="#ffffff" />
+  <rect x="241" y="218" width="30" height="38" rx="5" fill="#93c5fd" />
+</svg>
