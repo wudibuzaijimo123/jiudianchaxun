@@ -124,7 +124,9 @@ export const App: React.FC = () => {
   const [selectedHotel, setSelectedHotel] = useState<HotelItem | null>(null);
   const [detailHotel, setDetailHotel] = useState<HotelItem | null>(null);
   const [buyModalHotel, setBuyModalHotel] = useState<HotelItem | null>(null);
-  const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
+  const [settingsOpen, setSettingsOpen] = useState<boolean>(
+    () => new URLSearchParams(window.location.search).has('settings')
+  );
 
   const [favorites, setFavorites] = useState<HotelItem[]>(() => loadFavorites());
   const [historyList, setHistoryList] = useState<SearchHistoryItem[]>(() =>

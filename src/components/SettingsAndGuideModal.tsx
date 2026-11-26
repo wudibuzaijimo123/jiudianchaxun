@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { DataSourceMode, LlmConfig, SearchCenter } from '../types/hotel';
 import { isNativePackagedApp } from '../services/standaloneClient';
+import { JumpSelfTest } from './JumpSelfTest';
 
 interface Props {
   open: boolean;
@@ -476,6 +477,8 @@ export const SettingsAndGuideModal: React.FC<Props> = ({
               <ShieldCheck size={13} /> 所有密钥默认密码遮罩防截图泄露，且仅保存在你当前设备的浏览器本地存储（localStorage）中。
             </p>
           </form>
+
+          <JumpSelfTest />
 
           {selectedIp && (
             <div className="qr-sync-card">
